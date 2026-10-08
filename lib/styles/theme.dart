@@ -9,7 +9,7 @@ ThemeData temaApp() {
     pageTransitionsTheme: PageTransitionsTheme(
       builders: {
         TargetPlatform.android: _FastSlideFadeTransition(),
-        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.iOS: const CupertinoPageTransitionsBuilder(),
       },
     ),
     primaryColor: verde5Color,
