@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/home/home_screen.dart';
 
@@ -11,10 +12,24 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
   bool _obscurePassword = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailController.text = DemoData.instance.currentUser['email'] as String;
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
 
   void _login() {
     if (_formKey.currentState!.validate()) {
+      DemoData.instance.signIn(_emailController.text);
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const HomeScreen()),
@@ -37,7 +52,8 @@ class _LoginScreenState extends State<LoginScreen> {
               Image.asset(
                 isDark ? 'assets/logos/blanco.png' : 'assets/logos/blanco.png',
                 height: 80,
-                errorBuilder: (context, error, stackTrace) => const Icon(Icons.security, size: 80, color: verde5Color),
+                errorBuilder: (context, error, stackTrace) =>
+                    const Icon(Icons.security, size: 80, color: verde5Color),
               ),
               const SizedBox(height: 48),
               const Text(
@@ -51,14 +67,17 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   children: [
                     TextFormField(
+                      controller: _emailController,
                       decoration: InputDecoration(
                         labelText: 'Correo Electrónico',
                         prefixIcon: const Icon(Icons.email),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12)),
                         filled: true,
                         fillColor: isDark ? Colors.black12 : Colors.white,
                       ),
-                      validator: (value) => value!.isEmpty ? 'Ingrese su correo' : null,
+                      validator: (value) =>
+                          value!.isEmpty ? 'Ingrese su correo' : null,
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -67,14 +86,19 @@ class _LoginScreenState extends State<LoginScreen> {
                         labelText: 'Contraseña',
                         prefixIcon: const Icon(Icons.lock),
                         suffixIcon: IconButton(
-                          icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
-                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                          icon: Icon(_obscurePassword
+                              ? Icons.visibility
+                              : Icons.visibility_off),
+                          onPressed: () => setState(
+                              () => _obscurePassword = !_obscurePassword),
                         ),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12)),
                         filled: true,
                         fillColor: isDark ? Colors.black12 : Colors.white,
                       ),
-                      validator: (value) => value!.isEmpty ? 'Ingrese su contraseña' : null,
+                      validator: (value) =>
+                          value!.isEmpty ? 'Ingrese su contraseña' : null,
                     ),
                     const SizedBox(height: 32),
                     ElevatedButton(
@@ -83,9 +107,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         backgroundColor: verde6Color,
                         foregroundColor: Colors.white,
                         minimumSize: const Size(double.infinity, 50),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: const Text('Ingresar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      child: const Text('Ingresar',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
@@ -97,4 +124,3 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
-
