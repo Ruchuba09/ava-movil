@@ -91,6 +91,11 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                     _buildInfoRow('Estado', widget.report['status'].toString()),
                     _buildInfoRow(
                         'Reportado por', widget.report['reporter'].toString()),
+                    _buildInfoRow(
+                        'Jefe de cuadrilla',
+                        (widget.report['originalManager'] ??
+                                widget.report['manager'])
+                            .toString()),
                     _buildInfoRow('Encargado de cierre',
                         widget.report['manager'].toString()),
                     const SizedBox(height: 16),

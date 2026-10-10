@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
@@ -50,14 +48,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => ReportQrScreen(
-            reportData: jsonEncode({
-              'id': report['id'],
-              'project': report['project'],
-              'manager': report['manager'],
-              'action': 'close_report',
-            }),
-          ),
+          builder: (context) => ReportQrScreen(report: report),
         ),
       );
     }

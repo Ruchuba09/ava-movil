@@ -2,20 +2,35 @@ import 'package:flutter/material.dart';
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/reports/report_detail_screen.dart';
+import 'package:avamovil/view/reports/report_qr_screen.dart';
 
 class ReportsScreen extends StatefulWidget {
-  const ReportsScreen({super.key});
+  final String initialStatusFilter;
+  final String initialProjectFilter;
+
+  const ReportsScreen({
+    super.key,
+    this.initialStatusFilter = 'Todos',
+    this.initialProjectFilter = 'Todos los proyectos',
+  });
 
   @override
   State<ReportsScreen> createState() => _ReportsScreenState();
 }
 
 class _ReportsScreenState extends State<ReportsScreen> {
-  String _statusFilter = 'Todos';
-  String _projectFilter = 'Todos los proyectos';
+  late String _statusFilter;
+  late String _projectFilter;
   String _conditionFilter = 'Todas';
   DateTime? _fromDate;
   DateTime? _toDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _statusFilter = widget.initialStatusFilter;
+    _projectFilter = widget.initialProjectFilter;
+  }
 
   Future<void> _selectDate({required bool isStart}) async {
     final selected = await showDatePicker(
@@ -212,6 +227,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                           fontSize: 10,
                                           fontWeight: FontWeight.bold)),
                                 ),
+                                if (isOpen && DemoData.instance.canCloseReport(report))
+                                  IconButton(
+                                    tooltip: 'QR de cierre del flujo',
+                                    icon: const Icon(Icons.qr_code_2,
+                                        color: verde6Color),
+                                    onPressed: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            ReportQrScreen(report: report),
+                                      ),
+                                    ),
+                                  ),
                                 TextButton(
                                   onPressed: () => _openReport(report),
                                   child: const Text('Ver  →'),
@@ -277,7 +305,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       MaterialPageRoute(
         builder: (context) => ReportDetailScreen(
           report: report,
-          isLider: report['managerId'] == DemoData.instance.currentUser['id'],
+          isLider: DemoData.instance.canCloseReport(report),
         ),
       ),
     );

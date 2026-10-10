@@ -1,22 +1,42 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
+import 'package:avamovil/view/reports/report_detail_screen.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 class ReportQrScreen extends StatelessWidget {
-  final String reportData; // Data to encode in the QR
+  final Map<String, dynamic> report;
 
   const ReportQrScreen({
     super.key,
-    this.reportData = '{"id": 1234, "action": "close_report"}', // Mock data
+    required this.report,
   });
+
+  String get _payload => jsonEncode({
+        'id': report['id'],
+        'project': report['project'],
+        'reference': report['reference'],
+        'condition': report['condition'],
+        'conditionText': report['conditionText'],
+        'status': report['status'],
+        'reporterId': report['reporterId'],
+        'reporter': report['reporter'],
+        'managerId': report['managerId'],
+        'manager': report['manager'],
+        'originalManager': report['originalManager'],
+        'action': 'close_report',
+      });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final canClose = DemoData.instance.canCloseReport(report);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Validación de Encargado'),
+        title: const Text('QR de cierre de flujo'),
       ),
       body: Center(
         child: Padding(
@@ -24,9 +44,11 @@ class ReportQrScreen extends StatelessWidget {
           child: Card(
             elevation: 4,
             color: isDark ? gris2Color : Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 48.0),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 24.0, vertical: 48.0),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -38,34 +60,60 @@ class ReportQrScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Para terminar el flujo con o sin señal, muestra este código QR al encargado para que lo escanee.',
+                    'Muestra este QR al encargado para abrir directamente el cierre del flujo.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                    style: TextStyle(
+                        color: isDark ? Colors.grey[400] : Colors.grey[600]),
                   ),
                   const SizedBox(height: 32),
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.white, // QR always needs contrast
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: QrImageView(
-                      data: reportData,
+                      data: _payload,
                       version: QrVersions.auto,
                       size: 200.0,
                     ),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 16),
+                  if (canClose)
+                    ElevatedButton.icon(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ReportDetailScreen(
+                            report: report,
+                            isLider: true,
+                          ),
+                        ),
+                      ),
+                      icon: const Icon(Icons.lock_open_rounded),
+                      label: const Text('Abrir cierre del flujo'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: verde6Color,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size.fromHeight(48),
+                      ),
+                    )
+                  else
+                    const Text(
+                      'Solo el jefe de cuadrilla o su reemplazo temporal puede cerrar este flujo.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context); // Go back to Home
-                    },
+                    onPressed: () => Navigator.pop(context),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: verde6Color,
                       foregroundColor: Colors.white,
                       minimumSize: const Size(double.infinity, 50),
                     ),
-                    child: const Text('Volver al Inicio', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: const Text('Volver al Inicio',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
