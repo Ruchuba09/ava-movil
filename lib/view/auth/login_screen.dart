@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/home/home_screen.dart';
@@ -49,11 +50,10 @@ class _LoginScreenState extends State<LoginScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Image.asset(
-                isDark ? 'assets/logos/blanco.png' : 'assets/logos/blanco.png',
+              SvgPicture.asset(
+                isDark ? 'assets/logos/blanco.svg' : 'assets/logos/verde.svg',
                 height: 80,
-                errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.security, size: 80, color: verde5Color),
+                fit: BoxFit.contain,
               ),
               const SizedBox(height: 48),
               const Text(
