@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
+import 'package:avamovil/view/reports/reports_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -64,65 +65,71 @@ class _DashboardContentState extends State<_DashboardContent> {
               .where((report) => report['condition'] == '#${index + 1}')
               .length,
         );
-        final criticalIndex = counts.isEmpty
-            ? 0
-            : counts.indexOf(counts.reduce((a, b) => a > b ? a : b));
+        final openReports =
+            reports.where((report) => report['status'] == 'ABIERTA').length;
 
         return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('Panel Estadístico',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 4),
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 2),
               Text('Resumen de hallazgos y reportes (Tarjeta PARE).',
                   style: TextStyle(
                       color: isDark ? Colors.grey[400] : Colors.grey[700])),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final width = constraints.maxWidth > 700
-                      ? (constraints.maxWidth - 16) / 3
-                      : constraints.maxWidth;
+                  final projectFilter = DropdownButtonFormField<String>(
+                    initialValue: _project,
+                    isExpanded: true,
+                    decoration: _filterDecoration('PROYECTO', isDark),
+                    items: ['Todos los proyectos', ...DemoData.projects]
+                        .map((value) => DropdownMenuItem(
+                            value: value,
+                            child:
+                                Text(value, overflow: TextOverflow.ellipsis)))
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) setState(() => _project = value);
+                    },
+                  );
+                  final fromDate = _dateField(
+                      'DESDE', _fromDate, () => _selectDate(isStart: true));
+                  final toDate = _dateField(
+                      'HASTA', _toDate, () => _selectDate(isStart: false));
+                  if (constraints.maxWidth <= 700) {
+                    return Column(
+                      children: [
+                        projectFilter,
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(child: fromDate),
+                            const SizedBox(width: 8),
+                            Expanded(child: toDate),
+                          ],
+                        ),
+                      ],
+                    );
+                  }
+                  final width = (constraints.maxWidth - 16) / 3;
                   return Wrap(
                     spacing: 8,
-                    runSpacing: 8,
                     children: [
-                      SizedBox(
-                        width: width,
-                        child: DropdownButtonFormField<String>(
-                          initialValue: _project,
-                          isExpanded: true,
-                          decoration: _filterDecoration('PROYECTO', isDark),
-                          items: ['Todos los proyectos', ...DemoData.projects]
-                              .map((value) => DropdownMenuItem(
-                                  value: value,
-                                  child: Text(value,
-                                      overflow: TextOverflow.ellipsis)))
-                              .toList(),
-                          onChanged: (value) {
-                            if (value != null) setState(() => _project = value);
-                          },
-                        ),
-                      ),
-                      SizedBox(
-                          width: width,
-                          child: _dateField('DESDE', _fromDate,
-                              () => _selectDate(isStart: true))),
-                      SizedBox(
-                          width: width,
-                          child: _dateField('HASTA', _toDate,
-                              () => _selectDate(isStart: false))),
+                      SizedBox(width: width, child: projectFilter),
+                      SizedBox(width: width, child: fromDate),
+                      SizedBox(width: width, child: toDate),
                     ],
                   );
                 },
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
               _buildChart(context, isDark, counts),
-              const SizedBox(height: 12),
-              _buildStats(
-                  context, isDark, reports.length, counts, criticalIndex),
+              const SizedBox(height: 8),
+              _buildStats(context, isDark, reports.length, openReports),
             ],
           ),
         );
@@ -165,114 +172,188 @@ class _DashboardContentState extends State<_DashboardContent> {
   }
 
   Widget _buildChart(BuildContext context, bool isDark, List<int> counts) {
+    final chartGroups = [
+      counts.sublist(0, 5),
+      counts.sublist(5),
+    ];
     final maxCount = counts.fold<int>(
         1, (maximum, value) => value > maximum ? value : maximum);
+    final valueColor = isDark ? Colors.white70 : Colors.black87;
+
     return Card(
       elevation: 1,
       color: isDark ? gris2Color : Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('Frecuencia por Condición (Tarjeta PARE)',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            Text('Cantidad de reportes ingresados por cada tipo de condición.',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 2),
+            Text('Cantidad de reportes por tipo de condición.',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 20),
-            SizedBox(
-              height: 220,
-              child: LayoutBuilder(
-                builder: (context, constraints) => SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: SizedBox(
-                    width:
-                        constraints.maxWidth > 700 ? constraints.maxWidth : 700,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: List.generate(counts.length, (index) {
-                        final count = counts[index];
-                        return SizedBox(
-                          width: 54,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              Text('$count',
-                                  style: const TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 4),
-                              Container(
-                                height: count == 0 ? 2 : 130 * count / maxCount,
-                                decoration: const BoxDecoration(
-                                    color: verde6Color,
-                                    borderRadius: BorderRadius.vertical(
-                                        top: Radius.circular(3))),
+            const SizedBox(height: 10),
+            ...chartGroups.asMap().entries.map((entry) {
+              final groupIndex = entry.key;
+              final group = entry.value;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      height: 110,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: List.generate(group.length, (index) {
+                          final count = group[index];
+                          return Expanded(
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 2),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  Text('$count',
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: valueColor)),
+                                  const SizedBox(height: 3),
+                                  AnimatedContainer(
+                                    duration: const Duration(milliseconds: 220),
+                                    width: double.infinity,
+                                    height:
+                                        count == 0 ? 4 : 74 * count / maxCount,
+                                    decoration: const BoxDecoration(
+                                      color: verde6Color,
+                                      borderRadius: BorderRadius.vertical(
+                                          top: Radius.circular(3)),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 8),
-                              Text('${index + 1}.',
-                                  style: const TextStyle(fontSize: 10),
-                                  textAlign: TextAlign.center),
-                            ],
-                          ),
-                        );
-                      }),
+                            ),
+                          );
+                        }),
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: List.generate(
+                        group.length,
+                        (index) => Expanded(
+                          child: Text(
+                            '${(groupIndex * 5) + index + 1}',
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: valueColor,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ),
+              );
+            }),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildStats(BuildContext context, bool isDark, int total,
-      List<int> counts, int criticalIndex) {
-    final criticalCount = counts.isEmpty ? 0 : counts[criticalIndex];
-    final criticalLabel =
-        DemoData.conditions[criticalIndex].split(' ').skip(1).take(4).join(' ');
+  Widget _buildStats(
+      BuildContext context, bool isDark, int total, int openReports) {
     return Row(
       children: [
         Expanded(
-            child: _statCard(
-                context, isDark, 'TOTAL REPORTES', '$total', verde6Color)),
+          child: _statCard(
+            context,
+            isDark,
+            'TOTAL REPORTES',
+            '$total',
+            'Registrados en el período',
+            Icons.assessment_outlined,
+            verde6Color,
+            onTap: () => _openReportsList('Todos'),
+          ),
+        ),
         const SizedBox(width: 12),
         Expanded(
-            child: _statCard(context, isDark, 'CONDICIÓN MÁS CRÍTICA',
-                '$criticalCount\n$criticalLabel', Colors.red)),
+          child: _statCard(
+            context,
+            isDark,
+            'POR CERRAR',
+            '$openReports',
+            'Requieren seguimiento',
+            Icons.pending_actions_outlined,
+            Colors.deepOrange,
+            onTap: () => _openReportsList('Abierta'),
+          ),
+        ),
       ],
     );
   }
 
+  void _openReportsList(String status) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ReportsScreen(
+          initialStatusFilter: status == 'Todos' ? 'Todos' : 'Abierta',
+          initialProjectFilter: _project,
+        ),
+      ),
+    );
+  }
+
   Widget _statCard(BuildContext context, bool isDark, String title,
-          String value, Color valueColor) =>
-      Card(
-        elevation: 1,
-        color: isDark ? gris2Color : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Text(title,
-                  style: const TextStyle(
-                      fontSize: 11, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center),
-              const SizedBox(height: 8),
-              Text(value,
-                  style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: valueColor),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis),
-            ],
+          String value, String caption, IconData icon, Color valueColor,
+          {VoidCallback? onTap}) =>
+      Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Card(
+            elevation: 1,
+            color: isDark ? gris2Color : Colors.white,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: const TextStyle(
+                          fontSize: 10, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 7),
+                  Row(
+                    children: [
+                      Icon(icon, color: valueColor, size: 17),
+                      const SizedBox(width: 8),
+                      Text(value,
+                          style: TextStyle(
+                              fontSize: 19,
+                              fontWeight: FontWeight.bold,
+                              color: valueColor)),
+                    ],
+                  ),
+                  Text(caption,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            ),
           ),
         ),
       );

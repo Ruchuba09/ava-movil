@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:google_nav_bar/google_nav_bar.dart';
 import 'package:avamovil/dev/demo_data.dart';
@@ -8,6 +9,7 @@ import 'package:avamovil/view/dashboard/dashboard_screen.dart';
 import 'package:avamovil/view/reports/reports_screen.dart';
 import 'package:avamovil/view/reports/new_report_screen.dart';
 import 'package:avamovil/view/reports/report_detail_screen.dart';
+import 'package:avamovil/view/permissions/permissions_screen.dart';
 import 'package:avamovil/controller/theme_controller.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -19,6 +21,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
+  bool _showPermissions = false;
 
   static const List<Widget> _widgetOptions = <Widget>[
     DashboardScreen(),
@@ -62,8 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           MaterialPageRoute(
                             builder: (context) => ReportDetailScreen(
                               report: report,
-                              isLider: report['managerId'] ==
-                                  demoData.currentUser['id'],
+                              isLider: demoData.canCloseReport(report),
                             ),
                           ),
                         );
@@ -97,12 +99,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Image.asset(
-          isDark
-              ? 'assets/logos/blanco.png'
-              : 'assets/logos/blanco.png', // Fallback to whatever is available, preferably AVA logo
+        title: SvgPicture.asset(
+          isDark ? 'assets/logos/blanco.svg' : 'assets/logos/verde.svg',
           height: 32,
-          errorBuilder: (context, error, stackTrace) => Text(
+          fit: BoxFit.contain,
+          placeholderBuilder: (context) => Text(
             'AVA',
             style: TextStyle(
               color: isDark ? verde5Color : gris2Color,
@@ -212,14 +213,23 @@ class _HomeScreenState extends State<HomeScreen> {
             ListTile(
               leading: const Icon(Icons.home),
               title: const Text('Inicio'),
-              onTap: () => Navigator.pop(context),
+              onTap: () {
+                Navigator.pop(context);
+                setState(() {
+                  _selectedIndex = 0;
+                  _showPermissions = false;
+                });
+              },
             ),
             ListTile(
               leading: const Icon(Icons.dashboard),
               title: const Text('Dashboard'),
               onTap: () {
                 Navigator.pop(context);
-                setState(() => _selectedIndex = 0);
+                setState(() {
+                  _selectedIndex = 0;
+                  _showPermissions = false;
+                });
               },
             ),
             ListTile(
@@ -227,24 +237,28 @@ class _HomeScreenState extends State<HomeScreen> {
               title: const Text('Reportes'),
               onTap: () {
                 Navigator.pop(context);
-                setState(() => _selectedIndex = 1);
+                setState(() {
+                  _selectedIndex = 1;
+                  _showPermissions = false;
+                });
               },
-            ),
-            ListTile(
-              leading: const Icon(Icons.security),
-              title: const Text('Roles'),
-              onTap: () => Navigator.pop(context),
             ),
             ListTile(
               leading: const Icon(Icons.lock),
               title: const Text('Permisos'),
-              onTap: () => Navigator.pop(context),
+              onTap: () {
+                Navigator.pop(context);
+                setState(() => _showPermissions = true);
+              },
             ),
             ListTile(
               leading: const Icon(Icons.people),
               title: Text('Trabajadores a cargo (${workers.length})'),
               subtitle: Text(currentUser['name'] as String),
-              onTap: () => Navigator.pop(context),
+              onTap: () {
+                Navigator.pop(context);
+                setState(() => _showPermissions = true);
+              },
             ),
             ...workers.map((worker) => ListTile(
                   dense: true,
@@ -252,7 +266,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   leading: const Icon(Icons.person_outline, size: 18),
                   title: Text(worker['name'] as String),
                   subtitle: Text(worker['role'] as String),
-                  onTap: () => Navigator.pop(context),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            WorkerProfileScreen(worker: worker),
+                      ),
+                    );
+                  },
                 )),
             ListTile(
               leading: const Icon(Icons.logout),
@@ -279,7 +302,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-      body: _widgetOptions.elementAt(_selectedIndex),
+      body: _showPermissions
+          ? const PermissionsScreen()
+          : _widgetOptions.elementAt(_selectedIndex),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Theme.of(context).scaffoldBackgroundColor,
@@ -296,10 +321,10 @@ class _HomeScreenState extends State<HomeScreen> {
             child: GNav(
               rippleColor: Colors.grey[300]!,
               hoverColor: Colors.grey[100]!,
-              gap: 8,
+              gap: 6,
               activeColor: Colors.black,
-              iconSize: 24,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              iconSize: 22,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               duration: const Duration(milliseconds: 400),
               tabBackgroundColor: verde5Color,
               color: isDark ? Colors.white : Colors.black,
@@ -321,6 +346,7 @@ class _HomeScreenState extends State<HomeScreen> {
               onTabChange: (index) {
                 setState(() {
                   _selectedIndex = index;
+                  _showPermissions = false;
                 });
               },
             ),
