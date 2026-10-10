@@ -71,23 +71,67 @@ class DemoData extends ChangeNotifier {
   ];
 
   final List<Map<String, dynamic>> workers = [
-    {'id': 11, 'name': 'Juan Pérez', 'role': 'Operador', 'leaderId': 1},
-    {'id': 12, 'name': 'María Soto', 'role': 'Mecánica', 'leaderId': 1},
-    {'id': 13, 'name': 'Diego Fuentes', 'role': 'Rigger', 'leaderId': 1},
+    {
+      'id': 11,
+      'name': 'Juan Pérez',
+      'email': 'juan.perez@empresa.cl',
+      'role': 'Operador',
+      'leaderId': 1
+    },
+    {
+      'id': 12,
+      'name': 'María Soto',
+      'email': 'maria.soto@empresa.cl',
+      'role': 'Mecánica',
+      'leaderId': 1
+    },
+    {
+      'id': 13,
+      'name': 'Diego Fuentes',
+      'email': 'diego.fuentes@empresa.cl',
+      'role': 'Rigger',
+      'leaderId': 1
+    },
     {
       'id': 14,
       'name': 'Camila Torres',
+      'email': 'camila.torres@empresa.cl',
       'role': 'Prevencionista',
       'leaderId': 1
     },
-    {'id': 21, 'name': 'Andrés Silva', 'role': 'Operador', 'leaderId': 2},
-    {'id': 22, 'name': 'Valentina Díaz', 'role': 'Soldadora', 'leaderId': 2},
-    {'id': 23, 'name': 'Felipe Araya', 'role': 'Rigger', 'leaderId': 2},
-    {'id': 24, 'name': 'Daniela Leiva', 'role': 'Mecánica', 'leaderId': 2},
+    {
+      'id': 21,
+      'name': 'Andrés Silva',
+      'email': 'andres.silva@empresa.cl',
+      'role': 'Operador',
+      'leaderId': 2
+    },
+    {
+      'id': 22,
+      'name': 'Valentina Díaz',
+      'email': 'valentina.diaz@empresa.cl',
+      'role': 'Soldadora',
+      'leaderId': 2
+    },
+    {
+      'id': 23,
+      'name': 'Felipe Araya',
+      'email': 'felipe.araya@empresa.cl',
+      'role': 'Rigger',
+      'leaderId': 2
+    },
+    {
+      'id': 24,
+      'name': 'Daniela Leiva',
+      'email': 'daniela.leiva@empresa.cl',
+      'role': 'Mecánica',
+      'leaderId': 2
+    },
   ];
 
   final List<Map<String, dynamic>> reports = [];
   final List<Map<String, dynamic>> notifications = [];
+  final Map<int, Map<String, dynamic>> actingAssignments = {};
   int _nextNotificationId = 3;
 
   Map<String, dynamic> currentUser = {
@@ -102,6 +146,54 @@ class DemoData extends ChangeNotifier {
       .where((worker) => worker['leaderId'] == currentUser['id'])
       .toList();
 
+  List<Map<String, dynamic>> reportsForWorker(int workerId) =>
+      reports.where((report) => report['reporterId'] == workerId).toList();
+
+  Map<String, dynamic>? actingAssignmentFor(int leaderId) {
+    final assignment = actingAssignments[leaderId];
+    if (assignment == null) return null;
+    final until = assignment['until'] as DateTime;
+    if (until.isBefore(DateTime.now())) return null;
+    return assignment;
+  }
+
+  bool canCloseReport(Map<String, dynamic> report) {
+    final managerId = report['managerId'] as int;
+    if (currentUser['id'] == managerId) return true;
+    final assignment = actingAssignmentFor(managerId);
+    return assignment?['workerId'] == currentUser['id'];
+  }
+
+  void assignActingManager({
+    required int leaderId,
+    required int workerId,
+    required DateTime until,
+  }) {
+    final belongsToLeader = workers.any(
+        (worker) => worker['id'] == workerId && worker['leaderId'] == leaderId);
+    if (!belongsToLeader || !until.isAfter(DateTime.now())) return;
+    actingAssignments[leaderId] = {
+      'workerId': workerId,
+      'until': DateTime(until.year, until.month, until.day, 23, 59),
+    };
+    final pendingReports = reports.where((report) =>
+        report['managerId'] == leaderId && report['status'] == 'ABIERTA');
+    for (final report in pendingReports) {
+      _addNotification(
+        recipientId: workerId,
+        reportId: report['id'] as String,
+        title: 'Flujo delegado para cierre',
+        message: 'Quedaste a cargo temporal de cerrar este reporte PARE.',
+      );
+    }
+    notifyListeners();
+  }
+
+  void clearActingManager(int leaderId) {
+    actingAssignments.remove(leaderId);
+    notifyListeners();
+  }
+
   List<Map<String, dynamic>> get currentUserNotifications => notifications
       .where((notification) => notification['recipientId'] == currentUser['id'])
       .toList();
@@ -112,12 +204,23 @@ class DemoData extends ChangeNotifier {
 
   void signIn(String email) {
     final normalizedEmail = email.trim().toLowerCase();
-    currentUser = Map<String, dynamic>.from(
-      _users.firstWhere(
-        (user) => user['email'] == normalizedEmail,
-        orElse: () => _users.first,
-      ),
-    );
+    final user = _users.where((user) => user['email'] == normalizedEmail);
+    if (user.isNotEmpty) {
+      currentUser = Map<String, dynamic>.from(user.first);
+    } else {
+      final worker =
+          workers.where((worker) => worker['email'] == normalizedEmail);
+      if (worker.isNotEmpty) {
+        final leaderId = worker.first['leaderId'] as int;
+        currentUser = {
+          ...worker.first,
+          'project':
+              _users.firstWhere((user) => user['id'] == leaderId)['project'],
+        };
+      } else {
+        currentUser = Map<String, dynamic>.from(_users.first);
+      }
+    }
     notifyListeners();
   }
 
@@ -130,6 +233,11 @@ class DemoData extends ChangeNotifier {
   }) {
     final managerId = project == projects[1] ? 2 : 1;
     final manager = _users.firstWhere((user) => user['id'] == managerId);
+    final assignment = actingAssignmentFor(managerId);
+    final responsibleId = assignment?['workerId'] as int? ?? managerId;
+    final responsible = responsibleId == managerId
+        ? manager
+        : workers.firstWhere((worker) => worker['id'] == responsibleId);
     final reportId = '#${200 + reports.length}';
     final reporter = currentUser;
     final report = <String, dynamic>{
@@ -143,14 +251,15 @@ class DemoData extends ChangeNotifier {
       'reporterId': reporter['id'],
       'reporter': reporter['name'],
       'managerId': managerId,
-      'manager': manager['name'],
+      'manager': responsible['name'],
+      'originalManager': manager['name'],
       'description': description,
       'evidence': evidence,
       'closeDescription': '',
     };
     reports.insert(0, report);
     _addNotification(
-      recipientId: managerId,
+      recipientId: responsibleId,
       reportId: reportId,
       title: 'Nuevo reporte PARE asignado',
       message: '${reporter['name']} registró un hallazgo en $project.',
@@ -207,7 +316,7 @@ class DemoData extends ChangeNotifier {
       final project = projects[projectIndex];
       final managerId = projectIndex == 1 ? 2 : 1;
       final date = seedDate.subtract(Duration(days: index % 38));
-      final isClosed = index % 4 == 0;
+      final isClosed = index % 3 == 0;
       reports.add({
         'id': '#${200 - index}',
         'project': project,
