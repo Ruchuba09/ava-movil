@@ -47,6 +47,7 @@ dependencies:
   
   # foto evidencia
   image_picker: any
+  file_picker: ^5.5.0
   # vista pdf de formularios
   pdfx: ^2.8.0
   
