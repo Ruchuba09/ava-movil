@@ -448,16 +448,63 @@ class WorkerProfileScreen extends StatelessWidget {
                 ),
               ...reports.map((report) {
                 final date = report['date'] as DateTime;
+                final isOpen = report['status'] == 'ABIERTA';
+                final statusColor = isOpen ? Colors.deepOrange : Colors.teal;
+                final isDark = Theme.of(context).brightness == Brightness.dark;
                 return Card(
-                  margin: const EdgeInsets.only(bottom: 7),
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? gris2Color
-                      : Colors.white,
+                  margin: const EdgeInsets.only(bottom: 9),
+                  color: Color.lerp(
+                    isDark ? gris2Color : Colors.white,
+                    statusColor,
+                    isDark ? 0.16 : 0.08,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: statusColor.withValues(alpha: 0.55),
+                    ),
+                  ),
                   child: ListTile(
-                    title: Text('${report['id']}  ·  ${report['project']}'),
-                    subtitle: Text(
-                        '${report['condition']}  ·  ${date.day.toString().padLeft(2, '0')}-${date.month.toString().padLeft(2, '0')}-${date.year}  ·  ${report['status']}'),
-                    trailing: const Icon(Icons.chevron_right),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    leading: CircleAvatar(
+                      backgroundColor: statusColor.withValues(alpha: 0.18),
+                      child: Text(
+                        report['condition'] as String,
+                        style: TextStyle(
+                          color: statusColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    title: Text(
+                      '${report['id']}  ${report['project']}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 5),
+                      child: Text(
+                        '${date.day.toString().padLeft(2, '0')}-${date.month.toString().padLeft(2, '0')}-${date.year}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                    trailing: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          isOpen ? 'ABIERTA' : 'CERRADA',
+                          style: TextStyle(
+                            color: statusColor,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Icon(Icons.chevron_right, color: statusColor),
+                      ],
+                    ),
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(

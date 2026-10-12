@@ -188,141 +188,160 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
+        child: Column(
           children: [
-            DrawerHeader(
-              decoration: const BoxDecoration(
-                color: verde5Color,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
                 children: [
-                  SvgPicture.asset(
-                    isDark ? 'assets/logos/blanco.svg' : 'assets/logos/verde.svg',
-                    height: 36,
-                    fit: BoxFit.contain,
-                    placeholderBuilder: (context) => const Text(
-                      'AVA',
-                      style: TextStyle(
-                          color: Colors.black, fontWeight: FontWeight.bold),
-                    ),
+                  DrawerHeader(
+                      decoration: const BoxDecoration(
+                        color: verde5Color,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          SvgPicture.asset(
+                            isDark
+                                ? 'assets/logos/blanco.svg'
+                                : 'assets/logos/negro.svg',
+                            height: 36,
+                            fit: BoxFit.contain,
+                            placeholderBuilder: (context) => const Text(
+                              'AVA',
+                              style: TextStyle(
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                currentUser['name'] as String,
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                              Text(
+                                currentUser['email'] as String,
+                                style: const TextStyle(
+                                  color: Colors.black54,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              Text(currentUser['role'] as String,
+                                  style: const TextStyle(
+                                      color: Colors.black54, fontSize: 12)),
+                            ],
+                          ),
+                        ],
+                      ),
                   ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  ListTile(
+                    leading: const Icon(Icons.home),
+                    title: const Text('Inicio'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() {
+                        _selectedIndex = 0;
+                        _showPermissions = false;
+                      });
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.dashboard),
+                    title: const Text('Dashboard'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() {
+                        _selectedIndex = 0;
+                        _showPermissions = false;
+                      });
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.list_alt),
+                    title: const Text('Reportes'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() {
+                        _selectedIndex = 1;
+                        _showPermissions = false;
+                      });
+                    },
+                  ),
+                  ExpansionTile(
+                    leading: const Icon(Icons.people_outline),
+                    title: Text('Visualización y equipo (${workers.length})'),
                     children: [
-                      Text(
-                        currentUser['name'] as String,
-                        style: const TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
+                      ListTile(
+                        contentPadding:
+                            const EdgeInsets.only(left: 56, right: 16),
+                        leading: const Icon(Icons.visibility_outlined),
+                        title: const Text('Visualización de cuadrilla'),
+                        onTap: () {
+                          Navigator.pop(context);
+                          setState(() => _showPermissions = true);
+                        },
                       ),
-                      Text(
-                        currentUser['email'] as String,
-                        style: const TextStyle(
-                          color: Colors.black54,
-                          fontSize: 14,
-                        ),
-                      ),
-                      Text(currentUser['role'] as String,
-                          style: const TextStyle(
-                              color: Colors.black54, fontSize: 12)),
+                      ...workers.map((worker) => ListTile(
+                            dense: true,
+                            contentPadding:
+                                const EdgeInsets.only(left: 56, right: 16),
+                            leading:
+                                const Icon(Icons.person_outline, size: 18),
+                            title: Text(worker['name'] as String),
+                            subtitle: Text(worker['role'] as String),
+                            onTap: () {
+                              Navigator.pop(context);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      WorkerProfileScreen(worker: worker),
+                                ),
+                              );
+                            },
+                          )),
                     ],
                   ),
                 ],
               ),
             ),
-            ListTile(
-              leading: const Icon(Icons.home),
-              title: const Text('Inicio'),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() {
-                  _selectedIndex = 0;
-                  _showPermissions = false;
-                });
-              },
+            const Divider(height: 1),
+            SafeArea(
+              top: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Consumer<ThemeController>(
+                    builder: (context, themeController, child) {
+                      final darkMode =
+                          themeController.themeMode == ThemeMode.dark ||
+                              (themeController.themeMode == ThemeMode.system &&
+                                  MediaQuery.of(context).platformBrightness ==
+                                      Brightness.dark);
+                      return SwitchListTile(
+                        title: const Text('Modo Oscuro'),
+                        secondary: const Icon(Icons.dark_mode),
+                        value: darkMode,
+                        activeThumbColor: verde6Color,
+                        onChanged: themeController.toggleTheme,
+                      );
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.logout),
+                    title: const Text('Cerrar sesión'),
+                    onTap: _signOut,
+                  ),
+                ],
+              ),
             ),
-            ListTile(
-              leading: const Icon(Icons.dashboard),
-              title: const Text('Dashboard'),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() {
-                  _selectedIndex = 0;
-                  _showPermissions = false;
-                });
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.list_alt),
-              title: const Text('Reportes'),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() {
-                  _selectedIndex = 1;
-                  _showPermissions = false;
-                });
-              },
-            ),
-            ExpansionTile(
-              leading: const Icon(Icons.people_outline),
-              title: Text('Visualización y equipo (${workers.length})'),
-              children: [
-                ListTile(
-                  contentPadding: const EdgeInsets.only(left: 56, right: 16),
-                  leading: const Icon(Icons.visibility_outlined),
-                  title: const Text('Visualización de cuadrilla'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    setState(() => _showPermissions = true);
-                  },
-                ),
-                ...workers.map((worker) => ListTile(
-                      dense: true,
-                      contentPadding:
-                          const EdgeInsets.only(left: 56, right: 16),
-                      leading: const Icon(Icons.person_outline, size: 18),
-                      title: Text(worker['name'] as String),
-                      subtitle: Text(worker['role'] as String),
-                      onTap: () {
-                        Navigator.pop(context);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                WorkerProfileScreen(worker: worker),
-                          ),
-                        );
-                      },
-                    )),
-              ],
-            ),
-            ListTile(
-              leading: const Icon(Icons.logout),
-              title: const Text('Cerrar sesión'),
-              onTap: _signOut,
-            ),
-            const Divider(),
-            Consumer<ThemeController>(
-                builder: (context, themeController, child) {
-              final isDark = themeController.themeMode == ThemeMode.dark ||
-                  (themeController.themeMode == ThemeMode.system &&
-                      MediaQuery.of(context).platformBrightness ==
-                          Brightness.dark);
-              return SwitchListTile(
-                title: const Text('Modo Oscuro'),
-                secondary: const Icon(Icons.dark_mode),
-                value: isDark,
-                activeThumbColor: verde6Color,
-                onChanged: (value) {
-                  themeController.toggleTheme(value);
-                },
-              );
-            }),
           ],
         ),
       ),
