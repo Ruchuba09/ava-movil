@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
+import 'package:avamovil/view/reports/report_qr_screen.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 
@@ -19,6 +20,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _descController = TextEditingController();
   final List<File> _evidence = [];
+  bool _showReportEvidence = false;
 
   @override
   void dispose() {
@@ -55,6 +57,9 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isOpen = widget.report['status'] == 'ABIERTA';
     final reportDate = widget.report['date'] as DateTime;
+    final reportEvidence = (widget.report['evidence'] as List<dynamic>? ?? [])
+        .map((path) => path.toString())
+        .toList();
     final dateText =
         '${reportDate.day.toString().padLeft(2, '0')}-${reportDate.month.toString().padLeft(2, '0')}-${reportDate.year}';
 
@@ -114,6 +119,95 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                     ],
                   ],
                 ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            OutlinedButton.icon(
+              onPressed: reportEvidence.isEmpty
+                  ? null
+                  : () => setState(
+                      () => _showReportEvidence = !_showReportEvidence),
+              icon: Icon(_showReportEvidence
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined),
+              label: Text(
+                '${_showReportEvidence ? 'Ocultar' : 'Mostrar'} evidencia del reporte (${reportEvidence.length})',
+              ),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+            ),
+            if (_showReportEvidence && reportEvidence.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Card(
+                color: isDark ? gris2Color : Colors.white,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: reportEvidence.map((path) {
+                      final file = File(path);
+                      final fileName = path.split(RegExp(r'[/\\]')).last;
+                      final isImage = RegExp(r'\.(jpe?g|png|gif|webp)$',
+                              caseSensitive: false)
+                          .hasMatch(path);
+                      return SizedBox(
+                        width: 104,
+                        child: Column(
+                          children: [
+                            if (isImage)
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.file(
+                                  file,
+                                  width: 104,
+                                  height: 88,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const SizedBox(
+                                    height: 88,
+                                    child: Icon(Icons.broken_image_outlined),
+                                  ),
+                                ),
+                              )
+                            else
+                              const SizedBox(
+                                height: 88,
+                                child: Icon(Icons.insert_drive_file_outlined,
+                                    size: 36),
+                              ),
+                            const SizedBox(height: 4),
+                            Text(
+                              fileName,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ReportQrScreen(
+                    report: widget.report,
+                    isNewReport: false,
+                  ),
+                ),
+              ),
+              icon: const Icon(Icons.qr_code_2),
+              label: const Text('Mostrar QR del reporte'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
               ),
             ),
             const SizedBox(height: 24),

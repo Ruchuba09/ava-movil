@@ -1,4 +1,7 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/reports/report_qr_screen.dart';
@@ -18,6 +21,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
   final List<XFile> _evidence = [];
   String _selectedProject = DemoData.projects.first;
   String? _selectedCondition;
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -27,31 +31,116 @@ class _NewReportScreenState extends State<NewReportScreen> {
   }
 
   Future<void> _pickEvidence() async {
-    final images = await ImagePicker().pickMultiImage();
-    if (images.isNotEmpty && mounted) {
-      setState(() => _evidence
-        ..clear()
-        ..addAll(images.take(3)));
+    final source = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Tomar foto'),
+              onTap: () => Navigator.pop(context, 'camera'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Elegir fotos'),
+              onTap: () => Navigator.pop(context, 'gallery'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.attach_file),
+              title: const Text('Elegir archivos'),
+              onTap: () => Navigator.pop(context, 'files'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null || !mounted) return;
+
+    try {
+      final picked = <XFile>[];
+      if (source == 'camera') {
+        final image = await ImagePicker().pickImage(source: ImageSource.camera);
+        if (image != null) picked.add(image);
+      } else if (source == 'gallery') {
+        picked.addAll(await ImagePicker().pickMultiImage());
+      } else {
+        final result = await FilePicker.platform.pickFiles(
+          type: FileType.any,
+          allowMultiple: true,
+        );
+        for (final file in result?.files ?? <PlatformFile>[]) {
+          if (file.path != null) picked.add(XFile(file.path!, name: file.name));
+        }
+      }
+      if (picked.isEmpty || !mounted) return;
+      final availableSlots = 3 - _evidence.length;
+      setState(() => _evidence.addAll(picked.take(availableSlots)));
+      if (picked.length > availableSlots) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Puedes adjuntar un máximo de 3 archivos.')),
+        );
+      }
+    } on PlatformException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo cargar la evidencia: ${error.message ?? error.code}')),
+        );
+      }
     }
   }
 
-  void _submitForm() {
-    if (_formKey.currentState!.validate()) {
-      DemoData.instance.addReport(
-        project: _selectedProject,
-        reference: _referenceController.text.trim(),
-        condition: _selectedCondition!,
-        description: _descriptionController.text.trim(),
-        evidence: _evidence.map((file) => file.path).toList(),
-      );
-      final report = DemoData.instance.reports.first;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ReportQrScreen(report: report),
+  Future<void> _submitForm() async {
+    if (_isSubmitting || !_formKey.currentState!.validate()) return;
+    setState(() => _isSubmitting = true);
+    final demoData = DemoData.instance;
+    demoData.addReport(
+      project: _selectedProject,
+      reference: _referenceController.text.trim(),
+      condition: _selectedCondition!,
+      description: _descriptionController.text.trim(),
+      evidence: _evidence.map((file) => file.path).toList(),
+    );
+    final report = demoData.reports.first;
+    var hasSignal = true;
+    try {
+      final connectivity = await Connectivity().checkConnectivity();
+      hasSignal = connectivity.any((result) => result != ConnectivityResult.none);
+    } on PlatformException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  'No se pudo verificar la conexión: ${error.message ?? error.code}')),
+        );
+      }
+    }
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
+    if (!hasSignal) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Sin conexión'),
+          content: const Text(
+              'El reporte se creó, pero no hay señal. Podrás verlo en Eventos y consultar su QR desde el detalle.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Entendido'),
+            ),
+          ],
         ),
       );
+      if (!mounted) return;
     }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ReportQrScreen(report: report),
+      ),
+    );
   }
 
   @override
@@ -180,7 +269,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
                     OutlinedButton.icon(
                         onPressed: _pickEvidence,
                         icon: const Icon(Icons.upload_file),
-                        label: const Text('Elegir archivos')),
+                        label: const Text('Agregar evidencia')),
                     Text(
                         _evidence.isEmpty
                             ? 'Ningún archivo seleccionado'
@@ -197,10 +286,18 @@ class _NewReportScreenState extends State<NewReportScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
-                    onPressed: _submitForm,
-                    icon: const Icon(Icons.check),
-                    label: const Text('Registrar evento',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    onPressed: _isSubmitting ? null : _submitForm,
+                    icon: _isSubmitting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.check),
+                    label: Text(
+                      _isSubmitting ? 'Guardando...' : 'Registrar evento',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     style: ElevatedButton.styleFrom(
                         backgroundColor: verde6Color,
                         foregroundColor: Colors.white,

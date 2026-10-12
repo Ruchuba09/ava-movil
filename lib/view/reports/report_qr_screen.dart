@@ -8,10 +8,12 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 class ReportQrScreen extends StatelessWidget {
   final Map<String, dynamic> report;
+  final bool isNewReport;
 
   const ReportQrScreen({
     super.key,
     required this.report,
+    this.isNewReport = true,
   });
 
   String get _payload => jsonEncode({
@@ -20,6 +22,7 @@ class ReportQrScreen extends StatelessWidget {
         'reference': report['reference'],
         'condition': report['condition'],
         'conditionText': report['conditionText'],
+        'description': report['description'],
         'status': report['status'],
         'reporterId': report['reporterId'],
         'reporter': report['reporter'],
@@ -54,9 +57,10 @@ class ReportQrScreen extends StatelessWidget {
                 children: [
                   const Icon(Icons.check_circle, color: successColor, size: 64),
                   const SizedBox(height: 16),
-                  const Text(
-                    '¡Reporte guardado!',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  Text(
+                    isNewReport ? '¡Reporte guardado!' : 'QR del reporte',
+                    style: const TextStyle(
+                        fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -124,4 +128,3 @@ class ReportQrScreen extends StatelessWidget {
     );
   }
 }
-

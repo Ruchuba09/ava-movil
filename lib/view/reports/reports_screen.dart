@@ -22,6 +22,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   late String _statusFilter;
   late String _projectFilter;
   String _conditionFilter = 'Todas';
+  final TextEditingController _internalIdController = TextEditingController();
   DateTime? _fromDate;
   DateTime? _toDate;
 
@@ -32,20 +33,25 @@ class _ReportsScreenState extends State<ReportsScreen> {
     _projectFilter = widget.initialProjectFilter;
   }
 
-  Future<void> _selectDate({required bool isStart}) async {
-    final selected = await showDatePicker(
+  @override
+  void dispose() {
+    _internalIdController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _selectDateRange() async {
+    final selected = await showDateRangePicker(
       context: context,
-      initialDate: (isStart ? _fromDate : _toDate) ?? DateTime(2026, 10, 8),
+      initialDateRange: _fromDate != null && _toDate != null
+          ? DateTimeRange(start: _fromDate!, end: _toDate!)
+          : null,
       firstDate: DateTime(2020),
       lastDate: DateTime(2035),
     );
     if (selected != null) {
       setState(() {
-        if (isStart) {
-          _fromDate = selected;
-        } else {
-          _toDate = selected;
-        }
+        _fromDate = selected.start;
+        _toDate = selected.end;
       });
     }
   }
@@ -70,13 +76,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
               report['condition'] == _conditionFilter;
           final passStatus = _statusFilter == 'Todos' ||
               report['status'] == _statusFilter.toUpperCase();
+          final internalId = _internalIdController.text.trim().toLowerCase();
+          final passInternalId = internalId.isEmpty ||
+              (report['id'] as String).toLowerCase().contains(internalId);
           final passFrom = _fromDate == null || !date.isBefore(_fromDate!);
-          final passTo = _toDate == null ||
-              !date.isAfter(DateTime(
-                  _toDate!.year, _toDate!.month, _toDate!.day, 23, 59));
+          final dayAfterTo = _toDate == null
+              ? null
+              : DateTime(_toDate!.year, _toDate!.month, _toDate!.day + 1);
+          final passTo = dayAfterTo == null || date.isBefore(dayAfterTo);
           return passProject &&
               passCondition &&
               passStatus &&
+              passInternalId &&
               passFrom &&
               passTo;
         }).toList();
@@ -100,7 +111,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   LayoutBuilder(
                     builder: (context, constraints) {
                       final width = constraints.maxWidth > 900
-                          ? (constraints.maxWidth - 32) / 5
+                          ? (constraints.maxWidth - 24) / 4
                           : constraints.maxWidth > 560
                               ? (constraints.maxWidth - 8) / 2
                               : constraints.maxWidth;
@@ -137,13 +148,55 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                   (value) =>
                                       setState(() => _statusFilter = value))),
                           SizedBox(
-                              width: width,
-                              child: _dateField('Desde', _formatDate(_fromDate),
-                                  () => _selectDate(isStart: true))),
+                            width: width,
+                            child: TextField(
+                              controller: _internalIdController,
+                              decoration: InputDecoration(
+                                labelText: 'ID interna',
+                                hintText: 'Ej: #200',
+                                prefixIcon: const Icon(Icons.tag),
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 8),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ),
                           SizedBox(
-                              width: width,
-                              child: _dateField('Hasta', _formatDate(_toDate),
-                                  () => _selectDate(isStart: false))),
+                            width: constraints.maxWidth,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: _dateField(
+                                    'Desde',
+                                    _formatDate(_fromDate),
+                                    _selectDateRange,
+                                    isDark,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: _dateField(
+                                    'Hasta',
+                                    _formatDate(_toDate),
+                                    _selectDateRange,
+                                    isDark,
+                                  ),
+                                ),
+                                if (_fromDate != null || _toDate != null)
+                                  IconButton(
+                                    tooltip: 'Limpiar fechas',
+                                    onPressed: () => setState(() {
+                                      _fromDate = null;
+                                      _toDate = null;
+                                    }),
+                                    icon: const Icon(Icons.close),
+                                  ),
+                              ],
+                            ),
+                          ),
                         ],
                       );
                     },
@@ -278,7 +331,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _dateField(String label, String value, VoidCallback onTap) {
+  Widget _dateField(
+      String label, String value, VoidCallback onTap, bool isDark) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -286,6 +340,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
         decoration: InputDecoration(
             labelText: label,
             suffixIcon: const Icon(Icons.calendar_today, size: 16),
+            filled: true,
+            fillColor: isDark ? gris2Color : Colors.white,
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
