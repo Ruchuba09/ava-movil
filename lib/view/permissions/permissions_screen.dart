@@ -54,7 +54,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Permisos de cuadrilla',
+              const Text('Visualización de cuadrilla',
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
               Text(
@@ -110,7 +110,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                     title: Text(worker['name'] as String,
                         style: const TextStyle(fontWeight: FontWeight.w600)),
                     subtitle: Text(
-                        '${worker['role']}  ·  ${workerReports.length} reportes'),
+                        '${worker['role']}  -  ${workerReports.length} reportes'),
                     trailing: isDelegate
                         ? const Tooltip(
                             message: 'Reemplazo temporal activo',
@@ -391,7 +391,7 @@ class WorkerProfileScreen extends StatelessWidget {
                   title: Text(worker['name'] as String,
                       style: const TextStyle(
                           fontSize: 18, fontWeight: FontWeight.bold)),
-                  subtitle: Text('${worker['role']}  ·  ${worker['email']}'),
+                  subtitle: Text('${worker['role']}\n${worker['email']}'),
                   trailing: isActing
                       ? const Tooltip(
                           message: 'Reemplazo temporal activo',
@@ -425,7 +425,13 @@ class WorkerProfileScreen extends StatelessWidget {
                   leading: const Icon(Icons.bar_chart, color: verde6Color),
                   title: const Text('Condición más reportada'),
                   subtitle: Text('Condición #$frequentCondition'),
-                  trailing: Text('${counts[frequentCondition - 1]}'),
+                  trailing: Text(
+                    '${counts[frequentCondition - 1]}',
+                    style: const TextStyle(
+                        fontSize: 30,
+                        fontWeight: FontWeight.bold,
+                        color: verde6Color),
+                  ),
                 ),
               ),
               const SizedBox(height: 18),
@@ -484,7 +490,7 @@ class WorkerProfileScreen extends StatelessWidget {
             children: [
               Text('$value',
                   style: TextStyle(
-                      color: color, fontSize: 21, fontWeight: FontWeight.bold)),
+                      color: color, fontSize: 25, fontWeight: FontWeight.bold)),
               Text(title,
                   style: const TextStyle(
                       fontSize: 9, fontWeight: FontWeight.bold)),

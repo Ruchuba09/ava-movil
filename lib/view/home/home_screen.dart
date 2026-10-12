@@ -75,6 +75,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
         ),
         actions: [
+          if (notifications.any((notification) => notification['read'] == true))
+            TextButton.icon(
+              onPressed: () {
+                demoData.deleteReadNotifications();
+                Navigator.pop(dialogContext);
+              },
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Eliminar leídas'),
+            ),
           TextButton(
               onPressed: () => Navigator.pop(dialogContext),
               child: const Text('Cerrar'))
@@ -188,25 +197,41 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    currentUser['name'] as String,
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
+                  SvgPicture.asset(
+                    isDark ? 'assets/logos/blanco.svg' : 'assets/logos/verde.svg',
+                    height: 36,
+                    fit: BoxFit.contain,
+                    placeholderBuilder: (context) => const Text(
+                      'AVA',
+                      style: TextStyle(
+                          color: Colors.black, fontWeight: FontWeight.bold),
                     ),
                   ),
-                  Text(
-                    currentUser['email'] as String,
-                    style: TextStyle(
-                      color: Colors.black54,
-                      fontSize: 14,
-                    ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        currentUser['name'] as String,
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      ),
+                      Text(
+                        currentUser['email'] as String,
+                        style: const TextStyle(
+                          color: Colors.black54,
+                          fontSize: 14,
+                        ),
+                      ),
+                      Text(currentUser['role'] as String,
+                          style: const TextStyle(
+                              color: Colors.black54, fontSize: 12)),
+                    ],
                   ),
-                  Text(currentUser['role'] as String,
-                      style: TextStyle(color: Colors.black54, fontSize: 12)),
                 ],
               ),
             ),
@@ -243,40 +268,39 @@ class _HomeScreenState extends State<HomeScreen> {
                 });
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.lock),
-              title: const Text('Permisos'),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() => _showPermissions = true);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.people),
-              title: Text('Trabajadores a cargo (${workers.length})'),
-              subtitle: Text(currentUser['name'] as String),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() => _showPermissions = true);
-              },
-            ),
-            ...workers.map((worker) => ListTile(
-                  dense: true,
+            ExpansionTile(
+              leading: const Icon(Icons.people_outline),
+              title: Text('Visualización y equipo (${workers.length})'),
+              children: [
+                ListTile(
                   contentPadding: const EdgeInsets.only(left: 56, right: 16),
-                  leading: const Icon(Icons.person_outline, size: 18),
-                  title: Text(worker['name'] as String),
-                  subtitle: Text(worker['role'] as String),
+                  leading: const Icon(Icons.visibility_outlined),
+                  title: const Text('Visualización de cuadrilla'),
                   onTap: () {
                     Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            WorkerProfileScreen(worker: worker),
-                      ),
-                    );
+                    setState(() => _showPermissions = true);
                   },
-                )),
+                ),
+                ...workers.map((worker) => ListTile(
+                      dense: true,
+                      contentPadding:
+                          const EdgeInsets.only(left: 56, right: 16),
+                      leading: const Icon(Icons.person_outline, size: 18),
+                      title: Text(worker['name'] as String),
+                      subtitle: Text(worker['role'] as String),
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                WorkerProfileScreen(worker: worker),
+                          ),
+                        );
+                      },
+                    )),
+              ],
+            ),
             ListTile(
               leading: const Icon(Icons.logout),
               title: const Text('Cerrar sesión'),
