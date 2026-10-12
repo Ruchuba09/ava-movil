@@ -286,6 +286,13 @@ class DemoData extends ChangeNotifier {
     notifyListeners();
   }
 
+  void deleteReadNotifications() {
+    final userId = currentUser['id'];
+    notifications.removeWhere((notification) =>
+        notification['recipientId'] == userId && notification['read'] == true);
+    notifyListeners();
+  }
+
   void _addNotification({
     required int recipientId,
     required String reportId,
