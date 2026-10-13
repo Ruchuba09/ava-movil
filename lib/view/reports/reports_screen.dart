@@ -170,6 +170,26 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                         .map((option) => SelectionOption(
                                             value: option, label: option))
                                         .toList(),
+                                    optionRows: [
+                                      const [
+                                        SelectionOption(
+                                            value: 'Todas', label: 'Todas'),
+                                      ],
+                                      List.generate(
+                                        5,
+                                        (index) => SelectionOption(
+                                          value: '#${index + 1}',
+                                          label: '#${index + 1}',
+                                        ),
+                                      ),
+                                      List.generate(
+                                        5,
+                                        (index) => SelectionOption(
+                                          value: '#${index + 6}',
+                                          label: '#${index + 6}',
+                                        ),
+                                      ),
+                                    ],
                                     onChanged: (value) {
                                       if (value != null) {
                                         setState(
@@ -233,8 +253,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                           isDark,
                                         ),
                                       ),
-                                      if (_fromDate != null ||
-                                          _toDate != null)
+                                      if (_fromDate != null || _toDate != null)
                                         IconButton(
                                           tooltip: 'Limpiar fechas',
                                           onPressed: () => setState(() {
@@ -275,13 +294,25 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         final subject =
                             (report['subject'] ?? report['reporter'])
                                 .toString();
+                        final statusColor =
+                            isOpen ? const Color(0xFFFF542E) : Colors.cyan;
+                        final cardColor = isOpen
+                            ? (isDark
+                                ? const Color(0xFF432F2A)
+                                : const Color(0xFFFFE9E2))
+                            : (isDark
+                                ? const Color(0xFF1C3D3F)
+                                : const Color(0xFFE0F5F3));
                         return Card(
                           margin: const EdgeInsets.symmetric(
                               horizontal: 16, vertical: 6),
-                          color: isDark ? gris2Color : Colors.white,
+                          color: cardColor,
                           elevation: 2,
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
+                            borderRadius: BorderRadius.circular(10),
+                            side: BorderSide(
+                                color: statusColor.withValues(alpha: 0.8)),
+                          ),
                           clipBehavior: Clip.antiAlias,
                           child: InkWell(
                             onTap: () => _openReport(report),
@@ -292,12 +323,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 children: [
                                   CircleAvatar(
                                     radius: 21,
-                                    backgroundColor: verde1Color,
+                                    backgroundColor:
+                                        statusColor.withValues(alpha: 0.16),
                                     child: Text(report['id'] as String,
                                         style: const TextStyle(
-                                            color: verde6Color,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 11)),
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 11)
+                                            .copyWith(color: statusColor)),
                                   ),
                                   const SizedBox(width: 11),
                                   Expanded(
@@ -334,9 +366,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                               child: Text(
                                                 isOpen ? 'ABIERTA' : 'CERRADA',
                                                 style: TextStyle(
-                                                  color: isOpen
-                                                      ? verde6Color
-                                                      : Colors.grey[700],
+                                                  color: statusColor,
                                                   fontSize: 9,
                                                   fontWeight: FontWeight.bold,
                                                 ),
@@ -362,14 +392,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                           children: [
                                             _reportMeta(
                                               context,
-                                              '${report['condition']} · ${_formatReportDate(report['date'] as DateTime)}',
+                                              '${report['condition']} · ${_formatReportDateTime(report)}',
                                               Icons.event_outlined,
+                                              statusColor,
                                             ),
                                             if (isThirdParty)
                                               _reportMeta(
                                                 context,
                                                 'Para $subject',
                                                 Icons.people_outline,
+                                                statusColor,
                                               ),
                                           ],
                                         ),
@@ -381,7 +413,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                     IconButton(
                                       tooltip: 'QR de cierre del flujo',
                                       icon: const Icon(Icons.qr_code_2,
-                                          color: verde6Color),
+                                          color: Color(0xFFFF542E)),
                                       onPressed: () => Navigator.push(
                                         context,
                                         MaterialPageRoute(
@@ -391,9 +423,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                       ),
                                     )
                                   else
-                                    const Padding(
-                                      padding: EdgeInsets.only(left: 6),
-                                      child: Icon(Icons.chevron_right),
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 6),
+                                      child: Icon(Icons.chevron_right,
+                                          color: statusColor),
                                     ),
                                 ],
                               ),
@@ -409,12 +442,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _reportMeta(BuildContext context, String label, IconData icon) => Row(
+  Widget _reportMeta(
+          BuildContext context, String label, IconData icon, Color color) =>
+      Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: verde6Color),
+          Icon(icon, size: 13, color: color),
           const SizedBox(width: 3),
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
+          Text(label,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: color)),
         ],
       );
 
@@ -439,8 +478,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  String _formatReportDate(DateTime date) =>
-      '${date.day.toString().padLeft(2, '0')}-${date.month.toString().padLeft(2, '0')}-${date.year}';
+  String _formatReportDateTime(Map<String, dynamic> report) {
+    final date = report['createdAt'] as DateTime? ?? report['date'] as DateTime;
+    return '${date.day.toString().padLeft(2, '0')}-${date.month.toString().padLeft(2, '0')}-${date.year} · ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
 
   void _openReport(Map<String, dynamic> report) {
     Navigator.push(

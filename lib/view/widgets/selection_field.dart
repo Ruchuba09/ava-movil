@@ -12,6 +12,7 @@ class SelectionField<T> extends StatelessWidget {
   final String label;
   final T? value;
   final List<SelectionOption<T>> options;
+  final List<List<SelectionOption<T>>>? optionRows;
   final String hint;
   final ValueChanged<T?> onChanged;
   final String? Function(T?)? validator;
@@ -22,6 +23,7 @@ class SelectionField<T> extends StatelessWidget {
     required this.value,
     required this.options,
     required this.onChanged,
+    this.optionRows,
     this.hint = 'Selecciona una opción',
     this.validator,
   });
@@ -63,43 +65,93 @@ class SelectionField<T> extends StatelessWidget {
                     ),
                   ),
                   const Divider(height: 1),
-                  Flexible(
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      padding: const EdgeInsets.all(12),
-                      itemCount: options.length,
-                      separatorBuilder: (context, index) =>
-                          const SizedBox(height: 6),
-                      itemBuilder: (context, index) {
-                        final option = options[index];
-                        final selected = option.value == value;
-                        return Material(
-                          color: selected
-                              ? verde5Color.withValues(alpha: 0.2)
-                              : (isDark ? Colors.white10 : verde1Color),
-                          borderRadius: BorderRadius.circular(8),
-                          child: ListTile(
-                            dense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 2),
-                            title: Text(option.label),
-                            trailing: selected
-                                ? const Icon(Icons.check_circle,
-                                    color: verde6Color)
-                                : null,
-                            onTap: () =>
-                                Navigator.pop(sheetContext, option.value),
-                          ),
-                        );
-                      },
+                  if (optionRows != null)
+                    Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: optionRows!
+                            .map(
+                              (row) => Padding(
+                                padding: const EdgeInsets.only(bottom: 6),
+                                child: Row(
+                                  children: row
+                                      .map(
+                                        (option) => Expanded(
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 2),
+                                            child: _optionTile(
+                                                option, isDark, sheetContext),
+                                          ),
+                                        ),
+                                      )
+                                      .toList(),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    )
+                  else
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.all(12),
+                        itemCount: options.length,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 6),
+                        itemBuilder: (context, index) =>
+                            _optionTile(options[index], isDark, sheetContext),
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
           );
         },
       );
+
+  Widget _optionTile(
+    SelectionOption<T> option,
+    bool isDark,
+    BuildContext sheetContext,
+  ) {
+    final selected = option.value == value;
+    return Material(
+      color: selected
+          ? verde5Color.withValues(alpha: 0.2)
+          : (isDark ? Colors.white10 : verde1Color),
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => Navigator.pop(sheetContext, option.value),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 42),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Text(
+                  option.label,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+              if (selected) ...[
+                const SizedBox(width: 2),
+                const Icon(Icons.check_circle,
+                    color: verde6Color, size: 16),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

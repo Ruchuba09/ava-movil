@@ -24,6 +24,9 @@ void main() {
     expect(report['managerId'], 2);
     expect(report['originalManager'], 'Patricia Rojas');
     expect(data.reportsForWorker(21), contains(report));
+    expect(report['createdAt'], isA<DateTime>());
+    expect(report['hasConnectionAtCreation'], isTrue);
+    expect(report['activityLog'], hasLength(2));
 
     expect(
       () => data.closeReport(report, ' ', const ['evidencia.jpg']),
@@ -39,6 +42,33 @@ void main() {
     expect(report['status'], 'CERRADA');
     expect(report['closeDescription'], 'Cierre válido');
     expect(report['closeEvidence'], ['evidencia.jpg']);
+    expect(report['closedAt'], isA<DateTime>());
+    expect(report['activityLog'], hasLength(3));
+  });
+
+  test('offline report keeps QR connection status without notifying manager',
+      () {
+    final data = DemoData.instance;
+    final managerNotificationsBefore = data.notifications
+        .where((notification) => notification['recipientId'] == 2)
+        .length;
+    data.addReport(
+      project: DemoData.projects[1],
+      reference: 'Equipo offline',
+      condition: DemoData.conditions.first,
+      description: 'Descripción de prueba',
+      evidence: const [],
+      isThirdParty: true,
+      subjectWorkerId: 22,
+      hasConnection: false,
+    );
+
+    final report = data.reports.first;
+    final managerNotificationsAfter = data.notifications
+        .where((notification) => notification['recipientId'] == 2)
+        .length;
+    expect(report['hasConnectionAtCreation'], isFalse);
+    expect(managerNotificationsAfter, managerNotificationsBefore);
   });
 
   test('unfiltered worker report lists keep open reports first', () {

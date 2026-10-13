@@ -97,6 +97,19 @@ class _NewReportScreenState extends State<NewReportScreen> {
   Future<void> _submitForm() async {
     if (_isSubmitting || !_formKey.currentState!.validate()) return;
     setState(() => _isSubmitting = true);
+    var hasSignal = false;
+    try {
+      final connectivity = await Connectivity().checkConnectivity();
+      hasSignal = connectivity.any((result) => result != ConnectivityResult.none);
+    } on PlatformException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                    'No se pudo verificar la conexión: ${error.message ?? error.code}')),
+        );
+      }
+    }
     final demoData = DemoData.instance;
     demoData.addReport(
       project: _selectedProject,
@@ -106,40 +119,11 @@ class _NewReportScreenState extends State<NewReportScreen> {
       evidence: _evidence.map((file) => file.path).toList(),
       isThirdParty: _isThirdParty,
       subjectWorkerId: _isThirdParty ? _selectedSubjectId : null,
+      hasConnection: hasSignal,
     );
     final report = demoData.reports.first;
-    var hasSignal = true;
-    try {
-      final connectivity = await Connectivity().checkConnectivity();
-      hasSignal = connectivity.any((result) => result != ConnectivityResult.none);
-    } on PlatformException catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(
-                  'No se pudo verificar la conexión: ${error.message ?? error.code}')),
-        );
-      }
-    }
     if (!mounted) return;
     setState(() => _isSubmitting = false);
-    if (!hasSignal) {
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Sin conexión'),
-          content: const Text(
-              'El reporte se creó, pero no hay señal. Podrás verlo en el Listado Tarjeta PARE y consultar su QR desde el detalle.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Entendido'),
-            ),
-          ],
-        ),
-      );
-      if (!mounted) return;
-    }
     Navigator.push(
       context,
       MaterialPageRoute(

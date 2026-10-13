@@ -129,7 +129,8 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isOpen = widget.report['status'] == 'ABIERTA';
-    final reportDate = widget.report['date'] as DateTime;
+    final reportDate =
+        widget.report['createdAt'] as DateTime? ?? widget.report['date'] as DateTime;
     final reportEvidence = (widget.report['evidence'] as List<dynamic>? ?? [])
         .map((path) => path.toString())
         .toList();
@@ -137,8 +138,10 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         (widget.report['closeEvidence'] as List<dynamic>? ?? [])
             .map((path) => path.toString())
             .toList();
-    final dateText =
-        '${reportDate.day.toString().padLeft(2, '0')}-${reportDate.month.toString().padLeft(2, '0')}-${reportDate.year}';
+    final activityLog =
+        (widget.report['activityLog'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -169,7 +172,12 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                         'Referencia', widget.report['reference'].toString()),
                     _buildInfoRow(
                         'Condición', widget.report['conditionText'].toString()),
-                    _buildInfoRow('Fecha', dateText),
+                    _buildInfoRow('Creado', _formatDateTime(reportDate)),
+                    if (widget.report['closedAt'] is DateTime)
+                      _buildInfoRow(
+                          'Cerrado',
+                          _formatDateTime(
+                              widget.report['closedAt'] as DateTime)),
                     _buildInfoRow('Estado', widget.report['status'].toString()),
                     if (widget.report['isThirdParty'] == true) ...[
                       _buildInfoRow(
@@ -210,6 +218,45 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                 ),
               ),
             ),
+            if (activityLog.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Card(
+                color: isDark ? gris2Color : Colors.white,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Registro de actividad',
+                          style: TextStyle(
+                              fontSize: 17, fontWeight: FontWeight.bold)),
+                      const Divider(),
+                      ...activityLog.map((activity) {
+                        final at = activity['at'];
+                        return ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(
+                            activity['type'] == 'closed'
+                                ? Icons.task_alt
+                                : activity['type'] == 'connection'
+                                    ? Icons.wifi
+                                    : Icons.assignment_outlined,
+                            color: activity['type'] == 'closed'
+                                ? Colors.cyan
+                                : verde6Color,
+                          ),
+                          title: Text(activity['description'].toString()),
+                          subtitle: at is DateTime
+                              ? Text(_formatDateTime(at))
+                              : null,
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             OutlinedButton.icon(
               onPressed: reportEvidence.isEmpty
@@ -346,6 +393,9 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       ),
     );
   }
+
+  String _formatDateTime(DateTime date) =>
+      '${date.day.toString().padLeft(2, '0')}-${date.month.toString().padLeft(2, '0')}-${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
 
   Widget _buildEvidenceGrid(List<String> paths, {bool removable = false}) =>
       Wrap(

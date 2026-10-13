@@ -24,6 +24,8 @@ class ReportQrScreen extends StatelessWidget {
         'conditionText': report['conditionText'],
         'description': report['description'],
         'status': report['status'],
+        'createdAt': (report['createdAt'] ?? report['date']).toString(),
+        'hasConnectionAtCreation': report['hasConnectionAtCreation'],
         'reporterId': report['reporterId'],
         'reporter': report['reporter'],
         'managerId': report['managerId'],
@@ -32,10 +34,16 @@ class ReportQrScreen extends StatelessWidget {
         'action': 'close_report',
       });
 
+  String _formatDateTime(DateTime date) =>
+      '${date.day.toString().padLeft(2, '0')}-${date.month.toString().padLeft(2, '0')}-${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final canClose = DemoData.instance.canCloseReport(report);
+    final hadConnection = report['hasConnectionAtCreation'] as bool? ?? false;
+    final createdAt =
+        report['createdAt'] as DateTime? ?? report['date'] as DateTime?;
 
     return Scaffold(
       appBar: AppBar(
@@ -68,6 +76,50 @@ class ReportQrScreen extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                         color: isDark ? Colors.grey[400] : Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: hadConnection
+                          ? const Color(0xFF1C3D3F)
+                          : const Color(0xFF432F2A),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          hadConnection ? Icons.wifi : Icons.wifi_off,
+                          color: hadConnection
+                              ? Colors.cyan
+                              : const Color(0xFFFF542E),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            hadConnection
+                                ? 'Tiene conexión. Se registró una notificación en la aplicación para su encargado, para que complete el proceso.'
+                                : 'Usted no tiene conexión. Diríjase a su encargado para completar el proceso.',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (createdAt != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Tarjeta creada: ${_formatDateTime(createdAt)}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Text(
+                    'El QR sirve para identificar la tarjeta y abrir su cierre; no indica por sí solo que se haya creado sin conexión.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 32),
                   Container(
@@ -126,5 +178,6 @@ class ReportQrScreen extends StatelessWidget {
         ),
       ),
     );
+
   }
 }

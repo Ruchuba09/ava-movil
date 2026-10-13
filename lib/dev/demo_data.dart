@@ -213,6 +213,7 @@ class DemoData extends ChangeNotifier {
     required List<String> evidence,
     required bool isThirdParty,
     int? subjectWorkerId,
+    bool hasConnection = true,
   }) {
     if (isThirdParty && subjectWorkerId == null) {
       throw ArgumentError('Debe seleccionar a la persona reportada.');
@@ -233,14 +234,17 @@ class DemoData extends ChangeNotifier {
     final responsible = manager;
     final reportId = '#${200 + reports.length}';
     final subject = subjectWorker ?? reporter;
+    final createdAt = DateTime.now();
     final report = <String, dynamic>{
       'id': reportId,
       'project': project,
       'condition': '#${conditions.indexOf(condition) + 1}',
       'conditionText': condition,
       'reference': reference,
-      'date': DateTime.now(),
+      'date': createdAt,
+      'createdAt': createdAt,
       'status': 'ABIERTA',
+      'hasConnectionAtCreation': hasConnection,
       'reporterId': reporter['id'],
       'reporter': reporter['name'],
       'createdById': reporter['id'],
@@ -254,16 +258,32 @@ class DemoData extends ChangeNotifier {
       'description': description,
       'evidence': evidence,
       'closeDescription': '',
+      'activityLog': <Map<String, dynamic>>[
+        {
+          'type': 'created',
+          'description': 'Tarjeta PARE creada',
+          'at': createdAt,
+        },
+        {
+          'type': 'connection',
+          'description': hasConnection
+              ? 'Conexión disponible; notificación interna registrada para el encargado'
+              : 'Sin conexión; se debe informar al encargado para completar el cierre',
+          'at': createdAt,
+        },
+      ],
     };
     reports.insert(0, report);
-    _addNotification(
-      recipientId: responsibleId,
-      reportId: reportId,
-      title: 'Nuevo reporte PARE asignado',
-      message: isThirdParty
-          ? '${reporter['name']} registró un hallazgo para ${subject['name']} en $project.'
-          : '${reporter['name']} registró un hallazgo en $project.',
-    );
+    if (hasConnection) {
+      _addNotification(
+        recipientId: responsibleId,
+        reportId: reportId,
+        title: 'Nuevo reporte PARE asignado',
+        message: isThirdParty
+            ? '${reporter['name']} registró un hallazgo para ${subject['name']} en $project.'
+            : '${reporter['name']} registró un hallazgo en $project.',
+      );
+    }
     notifyListeners();
   }
 
@@ -281,7 +301,16 @@ class DemoData extends ChangeNotifier {
     report['status'] = 'CERRADA';
     report['closeDescription'] = closeDescription.trim();
     report['closeEvidence'] = List<String>.from(evidence);
-    report['closedAt'] = DateTime.now();
+    final closedAt = DateTime.now();
+    report['closedAt'] = closedAt;
+    final activityLog =
+        report['activityLog'] as List<Map<String, dynamic>>? ?? [];
+    activityLog.add({
+      'type': 'closed',
+      'description': 'Flujo cerrado por ${currentUser['name']}',
+      'at': closedAt,
+    });
+    report['activityLog'] = activityLog;
     _addNotification(
       recipientId: report['reporterId'] as int,
       reportId: report['id'] as String,
@@ -317,6 +346,7 @@ class DemoData extends ChangeNotifier {
       'title': title,
       'message': message,
       'read': false,
+      'createdAt': DateTime.now(),
     });
   }
 
@@ -335,6 +365,16 @@ class DemoData extends ChangeNotifier {
       final managerId = projectIndex == 1 ? 2 : 1;
       final date = seedDate.subtract(Duration(days: index % 38));
       final isClosed = index % 3 == 0;
+      final createdAt = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        7 + index % 11,
+        (index * 7) % 60,
+      );
+      final closedAt = isClosed
+          ? createdAt.add(Duration(minutes: 20 + (index * 13) % 120))
+          : null;
       reports.add({
         'id': '#${200 - index}',
         'project': project,
@@ -347,7 +387,10 @@ class DemoData extends ChangeNotifier {
           'Plataforma de montaje, Sector B',
         ][index % 4],
         'date': date,
+        'createdAt': createdAt,
         'status': isClosed ? 'CERRADA' : 'ABIERTA',
+        if (closedAt != null) 'closedAt': closedAt,
+        'hasConnectionAtCreation': true,
         'reporterId': 11 + (index % 4),
         'reporter': reporters[index % reporters.length],
         'managerId': managerId,
@@ -362,6 +405,19 @@ class DemoData extends ChangeNotifier {
         'closeDescription': isClosed
             ? 'Se corrigió la condición y se verificó el área antes de reiniciar la actividad.'
             : '',
+        'activityLog': <Map<String, dynamic>>[
+          {
+            'type': 'created',
+            'description': 'Tarjeta PARE creada',
+            'at': createdAt,
+          },
+          if (closedAt != null)
+            {
+              'type': 'closed',
+              'description': 'Flujo cerrado',
+              'at': closedAt,
+            },
+        ],
       });
     }
   }
