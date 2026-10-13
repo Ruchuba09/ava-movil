@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/reports/report_detail_screen.dart';
-import 'package:avamovil/view/reports/report_qr_screen.dart';
 import 'package:avamovil/view/widgets/selection_field.dart';
 
 class ReportsScreen extends StatefulWidget {
@@ -318,20 +317,21 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             onTap: () => _openReport(report),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 14),
+                                  horizontal: 12, vertical: 12),
                               child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
                                   CircleAvatar(
-                                    radius: 21,
+                                    radius: 20,
                                     backgroundColor:
                                         statusColor.withValues(alpha: 0.16),
                                     child: Text(report['id'] as String,
                                         style: const TextStyle(
                                                 fontWeight: FontWeight.bold,
-                                                fontSize: 11)
+                                                fontSize: 10)
                                             .copyWith(color: statusColor)),
                                   ),
-                                  const SizedBox(width: 11),
+                                  const SizedBox(width: 10),
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment:
@@ -345,89 +345,44 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                                 style: const TextStyle(
                                                     fontWeight:
                                                         FontWeight.bold),
-                                                maxLines: 2,
+                                                maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
-                                            const SizedBox(width: 6),
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 4),
-                                              decoration: BoxDecoration(
-                                                color: isOpen
-                                                    ? verde1Color
-                                                    : Colors.grey.withValues(
-                                                        alpha: 0.14),
-                                                borderRadius:
-                                                    BorderRadius.circular(14),
-                                              ),
-                                              child: Text(
-                                                isOpen ? 'ABIERTA' : 'CERRADA',
-                                                style: TextStyle(
-                                                  color: statusColor,
-                                                  fontSize: 9,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              isOpen ? 'ABIERTA' : 'CERRADA',
+                                              style: TextStyle(
+                                                color: statusColor,
+                                                fontSize: 10,
+                                                letterSpacing: 0.3,
+                                                fontWeight: FontWeight.bold,
                                               ),
                                             ),
                                           ],
                                         ),
-                                        const SizedBox(height: 5),
+                                        const SizedBox(height: 3),
                                         Text(
                                           report['reference'] as String,
-                                          maxLines: 2,
+                                          maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: Theme.of(context)
                                               .textTheme
                                               .bodySmall,
                                         ),
-                                        const SizedBox(height: 6),
-                                        Wrap(
-                                          spacing: 10,
-                                          runSpacing: 4,
-                                          crossAxisAlignment:
-                                              WrapCrossAlignment.center,
-                                          children: [
-                                            _reportMeta(
-                                              context,
-                                              '${report['condition']} · ${_formatReportDateTime(report)}',
-                                              Icons.event_outlined,
-                                              statusColor,
-                                            ),
-                                            if (isThirdParty)
-                                              _reportMeta(
-                                                context,
-                                                'Para $subject',
-                                                Icons.people_outline,
-                                                statusColor,
-                                              ),
-                                          ],
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          '${report['condition']}  ·  ${_formatReportDateTime(report)}${isThirdParty ? '  ·  Para $subject' : ''}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(color: statusColor),
                                         ),
                                       ],
                                     ),
                                   ),
-                                  if (isOpen &&
-                                      DemoData.instance.canCloseReport(report))
-                                    IconButton(
-                                      tooltip: 'QR de cierre del flujo',
-                                      icon: const Icon(Icons.qr_code_2,
-                                          color: Color(0xFFFF542E)),
-                                      onPressed: () => Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              ReportQrScreen(report: report),
-                                        ),
-                                      ),
-                                    )
-                                  else
-                                    Padding(
-                                      padding: const EdgeInsets.only(left: 6),
-                                      child: Icon(Icons.chevron_right,
-                                          color: statusColor),
-                                    ),
                                 ],
                               ),
                             ),
@@ -441,21 +396,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
       },
     );
   }
-
-  Widget _reportMeta(
-          BuildContext context, String label, IconData icon, Color color) =>
-      Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: color),
-          const SizedBox(width: 3),
-          Text(label,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: color)),
-        ],
-      );
 
   Widget _dateField(
       String label, String value, VoidCallback onTap, bool isDark) {
