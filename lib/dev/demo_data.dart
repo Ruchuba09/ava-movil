@@ -131,7 +131,6 @@ class DemoData extends ChangeNotifier {
 
   final List<Map<String, dynamic>> reports = [];
   final List<Map<String, dynamic>> notifications = [];
-  final Map<int, Map<String, dynamic>> actingAssignments = {};
   int _nextNotificationId = 3;
 
   Map<String, dynamic> currentUser = {
@@ -152,13 +151,12 @@ class DemoData extends ChangeNotifier {
           report['createdById'] == workerId)
       .toList();
 
-  Map<String, dynamic>? actingAssignmentFor(int leaderId) {
-    final assignment = actingAssignments[leaderId];
-    if (assignment == null) return null;
-    final until = assignment['until'] as DateTime;
-    if (until.isBefore(DateTime.now())) return null;
-    return assignment;
-  }
+  List<Map<String, dynamic>> openReportsFirst(
+          Iterable<Map<String, dynamic>> source) =>
+      [
+        ...source.where((report) => report['status'] == 'ABIERTA'),
+        ...source.where((report) => report['status'] != 'ABIERTA'),
+      ];
 
   int leaderIdForProject(String project) {
     final manager = _users.where((user) => user['project'] == project);
@@ -174,39 +172,7 @@ class DemoData extends ChangeNotifier {
 
   bool canCloseReport(Map<String, dynamic> report) {
     final managerId = report['managerId'] as int;
-    if (currentUser['id'] == managerId) return true;
-    final assignment = actingAssignmentFor(managerId);
-    return assignment?['workerId'] == currentUser['id'];
-  }
-
-  void assignActingManager({
-    required int leaderId,
-    required int workerId,
-    required DateTime until,
-  }) {
-    final belongsToLeader = workers.any(
-        (worker) => worker['id'] == workerId && worker['leaderId'] == leaderId);
-    if (!belongsToLeader || !until.isAfter(DateTime.now())) return;
-    actingAssignments[leaderId] = {
-      'workerId': workerId,
-      'until': DateTime(until.year, until.month, until.day, 23, 59),
-    };
-    final pendingReports = reports.where((report) =>
-        report['managerId'] == leaderId && report['status'] == 'ABIERTA');
-    for (final report in pendingReports) {
-      _addNotification(
-        recipientId: workerId,
-        reportId: report['id'] as String,
-        title: 'Flujo delegado para cierre',
-        message: 'Quedaste a cargo temporal de cerrar este reporte PARE.',
-      );
-    }
-    notifyListeners();
-  }
-
-  void clearActingManager(int leaderId) {
-    actingAssignments.remove(leaderId);
-    notifyListeners();
+    return currentUser['id'] == managerId;
   }
 
   List<Map<String, dynamic>> get currentUserNotifications => notifications
@@ -263,11 +229,8 @@ class DemoData extends ChangeNotifier {
                 'leaderId'] as int
             : leaderIdForProject(project));
     final manager = _users.firstWhere((user) => user['id'] == managerId);
-    final assignment = actingAssignmentFor(managerId);
-    final responsibleId = assignment?['workerId'] as int? ?? managerId;
-    final responsible = responsibleId == managerId
-        ? manager
-        : workers.firstWhere((worker) => worker['id'] == responsibleId);
+    final responsibleId = managerId;
+    final responsible = manager;
     final reportId = '#${200 + reports.length}';
     final subject = subjectWorker ?? reporter;
     final report = <String, dynamic>{

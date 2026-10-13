@@ -104,7 +104,7 @@ class ReportQrScreen extends StatelessWidget {
                     )
                   else
                     const Text(
-                      'Solo el jefe de cuadrilla o su reemplazo temporal puede cerrar este flujo.',
+                      'Solo el jefe de cuadrilla asignado a este reporte puede cerrar este flujo.',
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 12),
                     ),
@@ -116,7 +116,7 @@ class ReportQrScreen extends StatelessWidget {
                       foregroundColor: Colors.white,
                       minimumSize: const Size(double.infinity, 50),
                     ),
-                    child: const Text('Volver al Inicio',
+                    child: const Text('Volver',
                         style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ],

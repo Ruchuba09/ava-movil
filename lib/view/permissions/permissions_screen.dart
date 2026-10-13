@@ -12,19 +12,6 @@ class PermissionsScreen extends StatefulWidget {
 }
 
 class _PermissionsScreenState extends State<PermissionsScreen> {
-  int? _selectedWorkerId;
-  DateTime _until = DateTime.now().add(const Duration(days: 7));
-
-  Future<void> _selectEndDate() async {
-    final selected = await showDatePicker(
-      context: context,
-      initialDate: _until.isBefore(DateTime.now()) ? DateTime.now() : _until,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-    if (selected != null) setState(() => _until = selected);
-  }
-
   @override
   Widget build(BuildContext context) {
     final demoData = DemoData.instance;
@@ -42,13 +29,6 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
         final openCount =
             teamReports.where((report) => report['status'] == 'ABIERTA').length;
         final closedCount = teamReports.length - openCount;
-        final assignment = demoData.actingAssignmentFor(leaderId);
-        final isLeader = demoData.currentUser['id'] == leaderId &&
-            (demoData.currentUser['role'] as String).contains('JEFE');
-        final selectedWorker = _selectedWorkerId ??
-            assignment?['workerId'] as int? ??
-            (team.isEmpty ? null : team.first['id'] as int);
-
         return SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -58,7 +38,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
               Text(
-                'Gestiona reemplazos y revisa el desempeño de tu equipo.',
+                'Revisa los reportes y el desempeño de tu equipo.',
                 style: TextStyle(
                     color: Theme.of(context).brightness == Brightness.dark
                         ? Colors.grey[400]
@@ -74,8 +54,6 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                 onClosedTap: () => _openReportList('Cerrada'),
               ),
               const SizedBox(height: 16),
-              if (assignment != null)
-                _buildActiveAssignment(context, demoData, assignment, team),
               const SizedBox(height: 22),
               Text('Trabajadores a cargo (${team.length})',
                   style: const TextStyle(
@@ -92,7 +70,6 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
               ...team.map((worker) {
                 final workerReports =
                     demoData.reportsForWorker(worker['id'] as int);
-                final isDelegate = assignment?['workerId'] == worker['id'];
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   color: Theme.of(context).brightness == Brightness.dark
@@ -111,12 +88,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                         style: const TextStyle(fontWeight: FontWeight.w600)),
                     subtitle: Text(
                         '${worker['role']}  -  ${workerReports.length} reportes'),
-                    trailing: isDelegate
-                        ? const Tooltip(
-                            message: 'Reemplazo temporal activo',
-                            child: Icon(Icons.swap_horiz, color: verde6Color),
-                          )
-                        : const Icon(Icons.chevron_right),
+                    trailing: const Icon(Icons.chevron_right),
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -126,11 +98,6 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                   ),
                 );
               }),
-              if (isLeader) ...[
-                const SizedBox(height: 18),
-                _buildAssignmentForm(context, demoData, team, selectedWorker,
-                    assignment != null),
-              ],
             ],
           ),
         );
@@ -216,130 +183,6 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
         ),
       );
 
-  Widget _buildActiveAssignment(
-    BuildContext context,
-    DemoData demoData,
-    Map<String, dynamic> assignment,
-    List<Map<String, dynamic>> team,
-  ) {
-    final worker = team.firstWhere(
-        (item) => item['id'] == assignment['workerId'],
-        orElse: () => {'name': 'Trabajador'});
-    final until = assignment['until'] as DateTime;
-    return Card(
-      color: Theme.of(context).brightness == Brightness.dark
-          ? Colors.teal.withValues(alpha: 0.16)
-          : const Color(0xFFEAF7E5),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.verified_user_outlined, color: verde6Color),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text('${worker['name']} está a cargo temporalmente',
-                      style: const TextStyle(fontWeight: FontWeight.bold)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 5),
-            Text('Puede cerrar flujos hasta el ${_formatDate(until)}.'),
-            const SizedBox(height: 4),
-            const Text('El jefe de cuadrilla mantiene sus permisos de cierre.'),
-            if (demoData.currentUser['id'] ==
-                (demoData.currentUser['leaderId'] ??
-                    demoData.currentUser['id'])) ...[
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: () => demoData
-                      .clearActingManager((demoData.currentUser['id'] as int)),
-                  icon: const Icon(Icons.person_remove_outlined),
-                  label: const Text('Finalizar reemplazo'),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAssignmentForm(
-    BuildContext context,
-    DemoData demoData,
-    List<Map<String, dynamic>> team,
-    int? selectedWorker,
-    bool hasAssignment,
-  ) =>
-      Card(
-        color: Theme.of(context).brightness == Brightness.dark
-            ? gris2Color
-            : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(hasAssignment ? 'Cambiar reemplazo' : 'Asignar reemplazo',
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<int>(
-                initialValue: selectedWorker,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                    labelText: 'Trabajador responsable',
-                    border: OutlineInputBorder()),
-                items: team
-                    .map((worker) => DropdownMenuItem<int>(
-                        value: worker['id'] as int,
-                        child: Text(worker['name'] as String)))
-                    .toList(),
-                onChanged: team.isEmpty
-                    ? null
-                    : (value) => setState(() => _selectedWorkerId = value),
-              ),
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: _selectEndDate,
-                icon: const Icon(Icons.calendar_month_outlined),
-                label: Text('Vigente hasta ${_formatDate(_until)}'),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: team.isEmpty || selectedWorker == null
-                      ? null
-                      : () => demoData.assignActingManager(
-                            leaderId: demoData.currentUser['id'] as int,
-                            workerId: selectedWorker,
-                            until: _until,
-                          ),
-                  icon: const Icon(Icons.how_to_reg_outlined),
-                  label: const Text('Guardar reemplazo temporal'),
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: verde6Color,
-                      foregroundColor: Colors.white),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'La asignación no quita permisos al jefe de cuadrilla.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-          ),
-        ),
-      );
-
-  String _formatDate(DateTime date) =>
-      '${date.day.toString().padLeft(2, '0')}-${date.month.toString().padLeft(2, '0')}-${date.year}';
 }
 
 class WorkerProfileScreen extends StatelessWidget {
@@ -369,9 +212,7 @@ class WorkerProfileScreen extends StatelessWidget {
           final frequentCondition = counts.isEmpty
               ? 0
               : counts.indexOf(counts.reduce((a, b) => a > b ? a : b)) + 1;
-          final leaderId = worker['leaderId'] as int;
-          final assignment = demoData.actingAssignmentFor(leaderId);
-          final isActing = assignment?['workerId'] == workerId;
+          final displayedReports = demoData.openReportsFirst(reports);
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -392,12 +233,6 @@ class WorkerProfileScreen extends StatelessWidget {
                       style: const TextStyle(
                           fontSize: 18, fontWeight: FontWeight.bold)),
                   subtitle: Text('${worker['role']}\n${worker['email']}'),
-                  trailing: isActing
-                      ? const Tooltip(
-                          message: 'Reemplazo temporal activo',
-                          child: Icon(Icons.verified_user, color: verde6Color),
-                        )
-                      : null,
                 ),
               ),
               const SizedBox(height: 12),
@@ -446,7 +281,7 @@ class WorkerProfileScreen extends StatelessWidget {
                     child: Text('Este trabajador aún no tiene reportes.'),
                   ),
                 ),
-              ...reports.map((report) {
+              ...displayedReports.map((report) {
                 final date = report['date'] as DateTime;
                 final isOpen = report['status'] == 'ABIERTA';
                 final statusColor = isOpen ? Colors.deepOrange : Colors.teal;

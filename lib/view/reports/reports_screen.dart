@@ -3,6 +3,7 @@ import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/reports/report_detail_screen.dart';
 import 'package:avamovil/view/reports/report_qr_screen.dart';
+import 'package:avamovil/view/widgets/selection_field.dart';
 
 class ReportsScreen extends StatefulWidget {
   final String initialStatusFilter;
@@ -68,7 +69,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return AnimatedBuilder(
       animation: demoData,
       builder: (context, child) {
-        final filteredReports = demoData.reports.where((report) {
+        final matchingReports = demoData.reports.where((report) {
           final date = report['date'] as DateTime;
           final passProject = _projectFilter == 'Todos los proyectos' ||
               report['project'] == _projectFilter;
@@ -91,6 +92,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
               passFrom &&
               passTo;
         }).toList();
+        final filteredReports = _statusFilter == 'Todos'
+            ? demoData.openReportsFirst(matchingReports)
+            : matchingReports;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -100,106 +104,154 @@ class _ReportsScreenState extends State<ReportsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Eventos',
+                  const Text('Listado Tarjeta PARE',
                       style:
                           TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
                   Text('Listado de reportes registrados.',
                       style: TextStyle(
                           color: isDark ? Colors.grey[400] : Colors.grey[700])),
-                  const SizedBox(height: 12),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final width = constraints.maxWidth > 900
-                          ? (constraints.maxWidth - 24) / 4
-                          : constraints.maxWidth > 560
-                              ? (constraints.maxWidth - 8) / 2
-                              : constraints.maxWidth;
-                      return Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          SizedBox(
-                              width: width,
-                              child: _dropdown(
-                                  'Proyecto',
-                                  _projectFilter,
-                                  ['Todos los proyectos', ...DemoData.projects],
-                                  (value) =>
-                                      setState(() => _projectFilter = value))),
-                          SizedBox(
-                              width: width,
-                              child: _dropdown(
-                                  'Condición',
-                                  _conditionFilter,
-                                  [
-                                    'Todas',
-                                    ...List.generate(
-                                        10, (index) => '#${index + 1}')
-                                  ],
-                                  (value) => setState(
-                                      () => _conditionFilter = value))),
-                          SizedBox(
-                              width: width,
-                              child: _dropdown(
-                                  'Estado',
-                                  _statusFilter,
-                                  ['Todos', 'Abierta', 'Cerrada'],
-                                  (value) =>
-                                      setState(() => _statusFilter = value))),
-                          SizedBox(
-                            width: width,
-                            child: TextField(
-                              controller: _internalIdController,
-                              decoration: InputDecoration(
-                                labelText: 'ID interna',
-                                hintText: 'Ej: #200',
-                                prefixIcon: const Icon(Icons.tag),
-                                contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 8),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              onChanged: (_) => setState(() {}),
-                            ),
-                          ),
-                          SizedBox(
-                            width: constraints.maxWidth,
-                            child: Row(
+                  const SizedBox(height: 6),
+                  Theme(
+                    data: Theme.of(context).copyWith(
+                      dividerColor: Colors.transparent,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    child: ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      childrenPadding: const EdgeInsets.only(top: 6),
+                      leading: const Icon(Icons.tune),
+                      title: const Text('Filtros'),
+                      subtitle: Text(
+                        _statusFilter == 'Todos'
+                            ? 'Abiertas primero'
+                            : 'Estado: $_statusFilter',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      children: [
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final width = constraints.maxWidth > 900
+                                ? (constraints.maxWidth - 24) / 4
+                                : (constraints.maxWidth - 8) / 2;
+                            return Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
                               children: [
-                                Expanded(
-                                  child: _dateField(
-                                    'Desde',
-                                    _formatDate(_fromDate),
-                                    _selectDateRange,
-                                    isDark,
+                                SizedBox(
+                                  width: width,
+                                  child: SelectionField<String>(
+                                    label: 'Proyecto',
+                                    value: _projectFilter,
+                                    options: [
+                                      'Todos los proyectos',
+                                      ...DemoData.projects,
+                                    ]
+                                        .map((option) => SelectionOption(
+                                            value: option, label: option))
+                                        .toList(),
+                                    onChanged: (value) {
+                                      if (value != null) {
+                                        setState(() => _projectFilter = value);
+                                      }
+                                    },
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: _dateField(
-                                    'Hasta',
-                                    _formatDate(_toDate),
-                                    _selectDateRange,
-                                    isDark,
+                                SizedBox(
+                                  width: width,
+                                  child: SelectionField<String>(
+                                    label: 'Condición',
+                                    value: _conditionFilter,
+                                    options: [
+                                      'Todas',
+                                      ...List.generate(
+                                          10, (index) => '#${index + 1}'),
+                                    ]
+                                        .map((option) => SelectionOption(
+                                            value: option, label: option))
+                                        .toList(),
+                                    onChanged: (value) {
+                                      if (value != null) {
+                                        setState(
+                                            () => _conditionFilter = value);
+                                      }
+                                    },
                                   ),
                                 ),
-                                if (_fromDate != null || _toDate != null)
-                                  IconButton(
-                                    tooltip: 'Limpiar fechas',
-                                    onPressed: () => setState(() {
-                                      _fromDate = null;
-                                      _toDate = null;
-                                    }),
-                                    icon: const Icon(Icons.close),
+                                SizedBox(
+                                  width: width,
+                                  child: SelectionField<String>(
+                                    label: 'Estado',
+                                    value: _statusFilter,
+                                    options: ['Todos', 'Abierta', 'Cerrada']
+                                        .map((option) => SelectionOption(
+                                            value: option, label: option))
+                                        .toList(),
+                                    onChanged: (value) {
+                                      if (value != null) {
+                                        setState(() => _statusFilter = value);
+                                      }
+                                    },
                                   ),
+                                ),
+                                SizedBox(
+                                  width: width,
+                                  child: TextField(
+                                    controller: _internalIdController,
+                                    decoration: InputDecoration(
+                                      labelText: 'ID interna',
+                                      hintText: 'Ej: #200',
+                                      prefixIcon: const Icon(Icons.tag),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                              horizontal: 10, vertical: 8),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                    onChanged: (_) => setState(() {}),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: constraints.maxWidth,
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: _dateField(
+                                          'Desde',
+                                          _formatDate(_fromDate),
+                                          _selectDateRange,
+                                          isDark,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: _dateField(
+                                          'Hasta',
+                                          _formatDate(_toDate),
+                                          _selectDateRange,
+                                          isDark,
+                                        ),
+                                      ),
+                                      if (_fromDate != null ||
+                                          _toDate != null)
+                                        IconButton(
+                                          tooltip: 'Limpiar fechas',
+                                          onPressed: () => setState(() {
+                                            _fromDate = null;
+                                            _toDate = null;
+                                          }),
+                                          icon: const Icon(Icons.close),
+                                        ),
+                                    ],
+                                  ),
+                                ),
                               ],
-                            ),
-                          ),
-                        ],
-                      );
-                    },
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -235,7 +287,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             onTap: () => _openReport(report),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 11),
+                                  horizontal: 14, vertical: 14),
                               child: Row(
                                 children: [
                                   CircleAvatar(
@@ -261,7 +313,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                                 style: const TextStyle(
                                                     fontWeight:
                                                         FontWeight.bold),
-                                                maxLines: 1,
+                                                maxLines: 2,
                                                 overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
@@ -295,7 +347,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                         const SizedBox(height: 5),
                                         Text(
                                           report['reference'] as String,
-                                          maxLines: 1,
+                                          maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
                                           style: Theme.of(context)
                                               .textTheme
@@ -353,27 +405,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
           ],
         );
-      },
-    );
-  }
-
-  Widget _dropdown(String label, String value, List<String> options,
-      ValueChanged<String> onChanged) {
-    return DropdownButtonFormField<String>(
-      initialValue: value,
-      isExpanded: true,
-      decoration: InputDecoration(
-          labelText: label,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
-      items: options
-          .map((option) => DropdownMenuItem(
-              value: option,
-              child: Text(option, overflow: TextOverflow.ellipsis)))
-          .toList(),
-      onChanged: (value) {
-        if (value != null) onChanged(value);
       },
     );
   }

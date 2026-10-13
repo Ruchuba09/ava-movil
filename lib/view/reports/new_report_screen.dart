@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/reports/report_qr_screen.dart';
+import 'package:avamovil/view/widgets/selection_field.dart';
 import 'package:image_picker/image_picker.dart';
 
 class NewReportScreen extends StatefulWidget {
@@ -16,7 +17,6 @@ class NewReportScreen extends StatefulWidget {
 
 class _NewReportScreenState extends State<NewReportScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _conditionFieldKey = GlobalKey<FormFieldState<String>>();
   final _referenceController = TextEditingController();
   final _descriptionController = TextEditingController();
   final List<XFile> _evidence = [];
@@ -94,96 +94,6 @@ class _NewReportScreenState extends State<NewReportScreen> {
     }
   }
 
-  Future<void> _showConditionPicker() async {
-    final selected = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        final isDark = Theme.of(sheetContext).brightness == Brightness.dark;
-        return Container(
-          height: MediaQuery.of(sheetContext).size.height * 0.78,
-          decoration: BoxDecoration(
-            color: isDark ? gris2Color : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-          ),
-          child: SafeArea(
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 8, 10),
-                  child: Row(
-                    children: [
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Guía de condiciones de uso',
-                                style: TextStyle(
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.bold)),
-                            SizedBox(height: 3),
-                            Text('Selecciona la condición del reporte.'),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: 'Cerrar',
-                        onPressed: () => Navigator.pop(sheetContext),
-                        icon: const Icon(Icons.close),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1),
-                Expanded(
-                  child: ListView.separated(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: DemoData.conditions.length,
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(height: 6),
-                    itemBuilder: (context, index) {
-                      final condition = DemoData.conditions[index];
-                      final selectedCondition =
-                          condition == _selectedCondition;
-                      return Material(
-                        color: selectedCondition
-                            ? verde5Color.withValues(alpha: 0.22)
-                            : (isDark ? Colors.white10 : verde1Color),
-                        borderRadius: BorderRadius.circular(8),
-                        child: ListTile(
-                          dense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 2),
-                          leading: Text(
-                            condition.substring(0, 3),
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold),
-                          ),
-                          title: Text(condition.substring(4)),
-                          trailing: selectedCondition
-                              ? const Icon(Icons.check_circle,
-                                  color: verde6Color)
-                              : null,
-                          onTap: () =>
-                              Navigator.pop(sheetContext, condition),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-    if (selected != null && mounted) {
-      setState(() => _selectedCondition = selected);
-      _conditionFieldKey.currentState?.didChange(selected);
-    }
-  }
-
   Future<void> _submitForm() async {
     if (_isSubmitting || !_formKey.currentState!.validate()) return;
     setState(() => _isSubmitting = true);
@@ -219,7 +129,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
         builder: (context) => AlertDialog(
           title: const Text('Sin conexión'),
           content: const Text(
-              'El reporte se creó, pero no hay señal. Podrás verlo en Eventos y consultar su QR desde el detalle.'),
+              'El reporte se creó, pero no hay señal. Podrás verlo en el Listado Tarjeta PARE y consultar su QR desde el detalle.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -276,27 +186,19 @@ class _NewReportScreenState extends State<NewReportScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('PROYECTO',
-                    style:
-                        TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                const SizedBox(height: 6),
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedProject,
-                  isExpanded: true,
-                  decoration: _inputDecoration(isDark),
-                  items: DemoData.projects
-                      .map((project) => DropdownMenuItem(
-                          value: project,
-                          child:
-                              Text(project, overflow: TextOverflow.ellipsis)))
+                SelectionField<String>(
+                  label: 'PROYECTO',
+                  value: _selectedProject,
+                  options: DemoData.projects
+                      .map((project) =>
+                          SelectionOption(value: project, label: project))
                       .toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() {
-                        _selectedProject = value;
-                        _selectedSubjectId = null;
-                      });
-                    }
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() {
+                          _selectedProject = value;
+                          _selectedSubjectId = null;
+                        });
                   },
                 ),
                 const SizedBox(height: 14),
@@ -331,17 +233,16 @@ class _NewReportScreenState extends State<NewReportScreen> {
                 ),
                 if (_isThirdParty) ...[
                   const SizedBox(height: 10),
-                  DropdownButtonFormField<int>(
-                    initialValue: _selectedSubjectId,
-                    isExpanded: true,
-                    decoration: _inputDecoration(isDark,
-                        hint: 'Selecciona a la persona reportada'),
-                    items: DemoData.instance
+                  SelectionField<int>(
+                    key: ValueKey(_selectedProject),
+                    label: 'PERSONA REPORTADA',
+                    hint: 'Selecciona a la persona reportada',
+                    value: _selectedSubjectId,
+                    options: DemoData.instance
                         .workersForProject(_selectedProject)
-                        .map((worker) => DropdownMenuItem<int>(
+                        .map((worker) => SelectionOption<int>(
                               value: worker['id'] as int,
-                              child: Text(worker['name'] as String,
-                                  overflow: TextOverflow.ellipsis),
+                              label: worker['name'] as String,
                             ))
                         .toList(),
                     onChanged: (value) =>
@@ -369,50 +270,20 @@ class _NewReportScreenState extends State<NewReportScreen> {
                       : null,
                 ),
                 const SizedBox(height: 14),
-                const Text('CONDICIÓN DEL EVENTO (PARE)',
-                    style:
-                        TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                const SizedBox(height: 6),
-                FormField<String>(
-                  key: _conditionFieldKey,
-                  initialValue: _selectedCondition,
+                SelectionField<String>(
+                  label: 'CONDICIÓN DEL EVENTO (PARE)',
+                  hint: 'Seleccione la condición identificada',
+                  value: _selectedCondition,
+                  options: DemoData.conditions
+                      .map((condition) => SelectionOption(
+                            value: condition,
+                            label: condition,
+                          ))
+                      .toList(),
+                  onChanged: (value) =>
+                      setState(() => _selectedCondition = value),
                   validator: (value) =>
                       value == null ? 'Seleccione una condición' : null,
-                  builder: (field) => InkWell(
-                    onTap: _showConditionPicker,
-                    borderRadius: BorderRadius.circular(8),
-                    child: InputDecorator(
-                      decoration: _inputDecoration(isDark)
-                          .copyWith(errorText: field.errorText),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              _selectedCondition ??
-                                  'Seleccione la condición identificada',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: _selectedCondition == null
-                                    ? Theme.of(context).hintColor
-                                    : null,
-                              ),
-                            ),
-                          ),
-                          const Icon(Icons.arrow_drop_down),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: _showConditionPicker,
-                    icon: const Icon(Icons.menu_book_outlined, size: 18),
-                    label: const Text('Ver guía de condiciones de uso'),
-                  ),
                 ),
                 const SizedBox(height: 14),
                 const Text('DESCRIPCIÓN DETALLADA',

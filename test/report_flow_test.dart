@@ -40,4 +40,19 @@ void main() {
     expect(report['closeDescription'], 'Cierre válido');
     expect(report['closeEvidence'], ['evidencia.jpg']);
   });
+
+  test('unfiltered worker report lists keep open reports first', () {
+    final data = DemoData.instance;
+    final sorted = data.openReportsFirst([
+      {'id': '#closed', 'status': 'CERRADA'},
+      {'id': '#open', 'status': 'ABIERTA'},
+      {'id': '#closed-2', 'status': 'CERRADA'},
+      {'id': '#open-2', 'status': 'ABIERTA'},
+    ]);
+
+    expect(
+      sorted.map((report) => report['id']),
+      ['#open', '#open-2', '#closed', '#closed-2'],
+    );
+  });
 }

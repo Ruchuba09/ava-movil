@@ -5,7 +5,6 @@ import 'package:google_nav_bar/google_nav_bar.dart';
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/auth/login_screen.dart';
-import 'package:avamovil/view/dashboard/dashboard_screen.dart';
 import 'package:avamovil/view/reports/reports_screen.dart';
 import 'package:avamovil/view/reports/new_report_screen.dart';
 import 'package:avamovil/view/reports/report_detail_screen.dart';
@@ -24,9 +23,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _showPermissions = false;
 
   static const List<Widget> _widgetOptions = <Widget>[
-    DashboardScreen(),
-    ReportsScreen(),
     NewReportScreen(),
+    ReportsScreen(),
   ];
 
   Future<void> _showNotifications() async {
@@ -242,30 +240,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                   ),
                   ListTile(
-                    leading: const Icon(Icons.home),
-                    title: const Text('Inicio'),
-                    onTap: () {
-                      Navigator.pop(context);
-                      setState(() {
-                        _selectedIndex = 0;
-                        _showPermissions = false;
-                      });
-                    },
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.dashboard),
-                    title: const Text('Dashboard'),
-                    onTap: () {
-                      Navigator.pop(context);
-                      setState(() {
-                        _selectedIndex = 0;
-                        _showPermissions = false;
-                      });
-                    },
-                  ),
-                  ListTile(
                     leading: const Icon(Icons.list_alt),
-                    title: const Text('Reportes'),
+                    title: const Text('Listado Tarjeta PARE'),
                     onTap: () {
                       Navigator.pop(context);
                       setState(() {
@@ -373,16 +349,12 @@ class _HomeScreenState extends State<HomeScreen> {
               color: isDark ? Colors.white : Colors.black,
               tabs: const [
                 GButton(
-                  icon: Icons.dashboard,
-                  text: 'Dashboard',
+                  icon: Icons.add_box,
+                  text: 'Crear Tarjeta',
                 ),
                 GButton(
                   icon: Icons.list_alt,
-                  text: 'Reportes',
-                ),
-                GButton(
-                  icon: Icons.add_box,
-                  text: 'Nueva Tarjeta',
+                  text: 'Listado PARE',
                 ),
               ],
               selectedIndex: _selectedIndex,
