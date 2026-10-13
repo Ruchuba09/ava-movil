@@ -16,11 +16,14 @@ class NewReportScreen extends StatefulWidget {
 
 class _NewReportScreenState extends State<NewReportScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _conditionFieldKey = GlobalKey<FormFieldState<String>>();
   final _referenceController = TextEditingController();
   final _descriptionController = TextEditingController();
   final List<XFile> _evidence = [];
   String _selectedProject = DemoData.projects.first;
   String? _selectedCondition;
+  int? _selectedSubjectId;
+  bool _isThirdParty = false;
   bool _isSubmitting = false;
 
   @override
@@ -91,6 +94,96 @@ class _NewReportScreenState extends State<NewReportScreen> {
     }
   }
 
+  Future<void> _showConditionPicker() async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        final isDark = Theme.of(sheetContext).brightness == Brightness.dark;
+        return Container(
+          height: MediaQuery.of(sheetContext).size.height * 0.78,
+          decoration: BoxDecoration(
+            color: isDark ? gris2Color : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 8, 10),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Guía de condiciones de uso',
+                                style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.bold)),
+                            SizedBox(height: 3),
+                            Text('Selecciona la condición del reporte.'),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Cerrar',
+                        onPressed: () => Navigator.pop(sheetContext),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: DemoData.conditions.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 6),
+                    itemBuilder: (context, index) {
+                      final condition = DemoData.conditions[index];
+                      final selectedCondition =
+                          condition == _selectedCondition;
+                      return Material(
+                        color: selectedCondition
+                            ? verde5Color.withValues(alpha: 0.22)
+                            : (isDark ? Colors.white10 : verde1Color),
+                        borderRadius: BorderRadius.circular(8),
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 2),
+                          leading: Text(
+                            condition.substring(0, 3),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold),
+                          ),
+                          title: Text(condition.substring(4)),
+                          trailing: selectedCondition
+                              ? const Icon(Icons.check_circle,
+                                  color: verde6Color)
+                              : null,
+                          onTap: () =>
+                              Navigator.pop(sheetContext, condition),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (selected != null && mounted) {
+      setState(() => _selectedCondition = selected);
+      _conditionFieldKey.currentState?.didChange(selected);
+    }
+  }
+
   Future<void> _submitForm() async {
     if (_isSubmitting || !_formKey.currentState!.validate()) return;
     setState(() => _isSubmitting = true);
@@ -101,6 +194,8 @@ class _NewReportScreenState extends State<NewReportScreen> {
       condition: _selectedCondition!,
       description: _descriptionController.text.trim(),
       evidence: _evidence.map((file) => file.path).toList(),
+      isThirdParty: _isThirdParty,
+      subjectWorkerId: _isThirdParty ? _selectedSubjectId : null,
     );
     final report = demoData.reports.first;
     var hasSignal = true;
@@ -160,20 +255,10 @@ class _NewReportScreenState extends State<NewReportScreen> {
                 style: TextStyle(
                     color: isDark ? Colors.grey[400] : Colors.grey[700])),
             const SizedBox(height: 16),
-            if (constraints.maxWidth > 850)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: _buildForm(isDark)),
-                  const SizedBox(width: 16),
-                  SizedBox(width: 320, child: _buildGuide(isDark)),
-                ],
-              )
-            else ...[
-              _buildForm(isDark),
-              const SizedBox(height: 12),
-              _buildGuide(isDark),
-            ],
+            SizedBox(
+              width: constraints.maxWidth > 850 ? 720 : double.infinity,
+              child: _buildForm(isDark),
+            ),
           ],
         ),
       ),
@@ -206,9 +291,70 @@ class _NewReportScreenState extends State<NewReportScreen> {
                               Text(project, overflow: TextOverflow.ellipsis)))
                       .toList(),
                   onChanged: (value) {
-                    if (value != null) setState(() => _selectedProject = value);
+                    if (value != null) {
+                      setState(() {
+                        _selectedProject = value;
+                        _selectedSubjectId = null;
+                      });
+                    }
                   },
                 ),
+                const SizedBox(height: 14),
+                const Text('¿PARA QUIÉN ES EL REPORTE?',
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _reportSubjectChoice(
+                        label: 'Para mí',
+                        icon: Icons.person_outline,
+                        selected: !_isThirdParty,
+                        onTap: () => setState(() {
+                          _isThirdParty = false;
+                          _selectedSubjectId = null;
+                        }),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _reportSubjectChoice(
+                        label: 'Para un tercero',
+                        icon: Icons.people_outline,
+                        selected: _isThirdParty,
+                        onTap: () =>
+                            setState(() => _isThirdParty = true),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_isThirdParty) ...[
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<int>(
+                    initialValue: _selectedSubjectId,
+                    isExpanded: true,
+                    decoration: _inputDecoration(isDark,
+                        hint: 'Selecciona a la persona reportada'),
+                    items: DemoData.instance
+                        .workersForProject(_selectedProject)
+                        .map((worker) => DropdownMenuItem<int>(
+                              value: worker['id'] as int,
+                              child: Text(worker['name'] as String,
+                                  overflow: TextOverflow.ellipsis),
+                            ))
+                        .toList(),
+                    onChanged: (value) =>
+                        setState(() => _selectedSubjectId = value),
+                    validator: (value) => _isThirdParty && value == null
+                        ? DemoData.instance
+                                .workersForProject(_selectedProject)
+                                .isEmpty
+                            ? 'No hay personas disponibles para este proyecto'
+                            : 'Selecciona a la persona reportada'
+                        : null,
+                  ),
+                ],
                 const SizedBox(height: 14),
                 const Text('REFERENCIA',
                     style:
@@ -227,21 +373,46 @@ class _NewReportScreenState extends State<NewReportScreen> {
                     style:
                         TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                 const SizedBox(height: 6),
-                DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  decoration: _inputDecoration(isDark),
-                  hint: const Text('Seleccione la condición identificada'),
+                FormField<String>(
+                  key: _conditionFieldKey,
                   initialValue: _selectedCondition,
-                  items: DemoData.conditions
-                      .map((condition) => DropdownMenuItem(
-                          value: condition,
-                          child: Text(condition,
-                              maxLines: 2, overflow: TextOverflow.ellipsis)))
-                      .toList(),
-                  onChanged: (value) =>
-                      setState(() => _selectedCondition = value),
                   validator: (value) =>
                       value == null ? 'Seleccione una condición' : null,
+                  builder: (field) => InkWell(
+                    onTap: _showConditionPicker,
+                    borderRadius: BorderRadius.circular(8),
+                    child: InputDecorator(
+                      decoration: _inputDecoration(isDark)
+                          .copyWith(errorText: field.errorText),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _selectedCondition ??
+                                  'Seleccione la condición identificada',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: _selectedCondition == null
+                                    ? Theme.of(context).hintColor
+                                    : null,
+                              ),
+                            ),
+                          ),
+                          const Icon(Icons.arrow_drop_down),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _showConditionPicker,
+                    icon: const Icon(Icons.menu_book_outlined, size: 18),
+                    label: const Text('Ver guía de condiciones de uso'),
+                  ),
                 ),
                 const SizedBox(height: 14),
                 const Text('DESCRIPCIÓN DETALLADA',
@@ -312,52 +483,36 @@ class _NewReportScreenState extends State<NewReportScreen> {
         ),
       );
 
-  Widget _buildGuide(bool isDark) => Card(
-        elevation: 1,
-        color: isDark ? gris2Color : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('GUÍA DE CONDICIONES DE USO',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-              const SizedBox(height: 8),
-              ...DemoData.conditions.map((condition) {
-                final selected = condition == _selectedCondition;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 5),
-                  child: Material(
-                    color: selected
-                        ? verde5Color.withValues(alpha: 0.3)
-                        : (isDark ? Colors.white10 : verde1Color),
-                    borderRadius: BorderRadius.circular(6),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(6),
-                      onTap: () =>
-                          setState(() => _selectedCondition = condition),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 9, vertical: 8),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(condition.substring(0, 3),
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold, fontSize: 11)),
-                            const SizedBox(width: 6),
-                            Expanded(
-                                child: Text(condition.substring(4),
-                                    style: const TextStyle(fontSize: 11))),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }),
-            ],
+  Widget _reportSubjectChoice({
+    required String label,
+    required IconData icon,
+    required bool selected,
+    required VoidCallback onTap,
+  }) =>
+      Material(
+        color: selected ? verde5Color.withValues(alpha: 0.2) : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+            decoration: BoxDecoration(
+              border: Border.all(
+                  color: selected ? verde6Color : Colors.grey.shade500),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 18, color: selected ? verde6Color : null),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(label,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+              ],
+            ),
           ),
         ),
       );

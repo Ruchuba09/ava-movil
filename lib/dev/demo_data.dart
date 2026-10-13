@@ -146,8 +146,11 @@ class DemoData extends ChangeNotifier {
       .where((worker) => worker['leaderId'] == currentUser['id'])
       .toList();
 
-  List<Map<String, dynamic>> reportsForWorker(int workerId) =>
-      reports.where((report) => report['reporterId'] == workerId).toList();
+  List<Map<String, dynamic>> reportsForWorker(int workerId) => reports
+      .where((report) =>
+          (report['subjectId'] ?? report['reporterId']) == workerId ||
+          report['createdById'] == workerId)
+      .toList();
 
   Map<String, dynamic>? actingAssignmentFor(int leaderId) {
     final assignment = actingAssignments[leaderId];
@@ -155,6 +158,18 @@ class DemoData extends ChangeNotifier {
     final until = assignment['until'] as DateTime;
     if (until.isBefore(DateTime.now())) return null;
     return assignment;
+  }
+
+  int leaderIdForProject(String project) {
+    final manager = _users.where((user) => user['project'] == project);
+    return (manager.isEmpty ? _users.first : manager.first)['id'] as int;
+  }
+
+  List<Map<String, dynamic>> workersForProject(String project) {
+    final leaderId = leaderIdForProject(project);
+    return workers
+        .where((worker) => worker['leaderId'] == leaderId)
+        .toList();
   }
 
   bool canCloseReport(Map<String, dynamic> report) {
@@ -230,8 +245,23 @@ class DemoData extends ChangeNotifier {
     required String condition,
     required String description,
     required List<String> evidence,
+    required bool isThirdParty,
+    int? subjectWorkerId,
   }) {
-    final managerId = project == projects[1] ? 2 : 1;
+    if (isThirdParty && subjectWorkerId == null) {
+      throw ArgumentError('Debe seleccionar a la persona reportada.');
+    }
+    final subjectWorker = isThirdParty
+        ? workers.firstWhere((worker) =>
+            worker['id'] == subjectWorkerId &&
+            worker['leaderId'] == leaderIdForProject(project))
+        : null;
+    final reporter = currentUser;
+    final managerId = subjectWorker?['leaderId'] as int? ??
+        (workers.any((worker) => worker['id'] == reporter['id'])
+            ? workers.firstWhere((worker) => worker['id'] == reporter['id'])[
+                'leaderId'] as int
+            : leaderIdForProject(project));
     final manager = _users.firstWhere((user) => user['id'] == managerId);
     final assignment = actingAssignmentFor(managerId);
     final responsibleId = assignment?['workerId'] as int? ?? managerId;
@@ -239,7 +269,7 @@ class DemoData extends ChangeNotifier {
         ? manager
         : workers.firstWhere((worker) => worker['id'] == responsibleId);
     final reportId = '#${200 + reports.length}';
-    final reporter = currentUser;
+    final subject = subjectWorker ?? reporter;
     final report = <String, dynamic>{
       'id': reportId,
       'project': project,
@@ -250,6 +280,11 @@ class DemoData extends ChangeNotifier {
       'status': 'ABIERTA',
       'reporterId': reporter['id'],
       'reporter': reporter['name'],
+      'createdById': reporter['id'],
+      'createdBy': reporter['name'],
+      'isThirdParty': isThirdParty,
+      'subjectId': subject['id'],
+      'subject': subject['name'],
       'managerId': managerId,
       'manager': responsible['name'],
       'originalManager': manager['name'],
@@ -262,14 +297,27 @@ class DemoData extends ChangeNotifier {
       recipientId: responsibleId,
       reportId: reportId,
       title: 'Nuevo reporte PARE asignado',
-      message: '${reporter['name']} registró un hallazgo en $project.',
+      message: isThirdParty
+          ? '${reporter['name']} registró un hallazgo para ${subject['name']} en $project.'
+          : '${reporter['name']} registró un hallazgo en $project.',
     );
     notifyListeners();
   }
 
-  void closeReport(Map<String, dynamic> report, String closeDescription) {
+  void closeReport(
+    Map<String, dynamic> report,
+    String closeDescription,
+    List<String> evidence,
+  ) {
+    if (closeDescription.trim().isEmpty) {
+      throw ArgumentError('La descripción del cierre es obligatoria.');
+    }
+    if (evidence.isEmpty) {
+      throw ArgumentError('Debe adjuntar al menos una evidencia de cierre.');
+    }
     report['status'] = 'CERRADA';
-    report['closeDescription'] = closeDescription;
+    report['closeDescription'] = closeDescription.trim();
+    report['closeEvidence'] = List<String>.from(evidence);
     report['closedAt'] = DateTime.now();
     _addNotification(
       recipientId: report['reporterId'] as int,

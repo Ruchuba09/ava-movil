@@ -219,85 +219,132 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       itemBuilder: (context, index) {
                         final report = filteredReports[index];
                         final isOpen = report['status'] == 'ABIERTA';
+                        final isThirdParty = report['isThirdParty'] == true;
+                        final subject =
+                            (report['subject'] ?? report['reporter'])
+                                .toString();
                         return Card(
                           margin: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 5),
+                              horizontal: 16, vertical: 6),
                           color: isDark ? gris2Color : Colors.white,
-                          elevation: 1,
+                          elevation: 2,
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8)),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 10),
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 20,
-                                  backgroundColor: verde1Color,
-                                  child: Text(report['id'] as String,
-                                      style: const TextStyle(
-                                          color: verde6Color,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 11)),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(report['project'] as String,
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                          '${report['condition']}  |  ${_formatReportDate(report['date'] as DateTime)}  |  ${report['reference']}',
+                              borderRadius: BorderRadius.circular(10)),
+                          clipBehavior: Clip.antiAlias,
+                          child: InkWell(
+                            onTap: () => _openReport(report),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 11),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 21,
+                                    backgroundColor: verde1Color,
+                                    child: Text(report['id'] as String,
+                                        style: const TextStyle(
+                                            color: verde6Color,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11)),
+                                  ),
+                                  const SizedBox(width: 11),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                report['project'] as String,
+                                                style: const TextStyle(
+                                                    fontWeight:
+                                                        FontWeight.bold),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: isOpen
+                                                    ? verde1Color
+                                                    : Colors.grey.withValues(
+                                                        alpha: 0.14),
+                                                borderRadius:
+                                                    BorderRadius.circular(14),
+                                              ),
+                                              child: Text(
+                                                isOpen ? 'ABIERTA' : 'CERRADA',
+                                                style: TextStyle(
+                                                  color: isOpen
+                                                      ? verde6Color
+                                                      : Colors.grey[700],
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 5),
+                                        Text(
+                                          report['reference'] as String,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: Theme.of(context)
                                               .textTheme
-                                              .bodySmall),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 9, vertical: 5),
-                                  decoration: BoxDecoration(
-                                    color: isOpen
-                                        ? verde1Color
-                                        : Colors.grey.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: Text(report['status'] as String,
-                                      style: TextStyle(
-                                          color: isOpen
-                                              ? verde6Color
-                                              : Colors.grey[700],
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold)),
-                                ),
-                                if (isOpen && DemoData.instance.canCloseReport(report))
-                                  IconButton(
-                                    tooltip: 'QR de cierre del flujo',
-                                    icon: const Icon(Icons.qr_code_2,
-                                        color: verde6Color),
-                                    onPressed: () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            ReportQrScreen(report: report),
-                                      ),
+                                              .bodySmall,
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Wrap(
+                                          spacing: 10,
+                                          runSpacing: 4,
+                                          crossAxisAlignment:
+                                              WrapCrossAlignment.center,
+                                          children: [
+                                            _reportMeta(
+                                              context,
+                                              '${report['condition']} · ${_formatReportDate(report['date'] as DateTime)}',
+                                              Icons.event_outlined,
+                                            ),
+                                            if (isThirdParty)
+                                              _reportMeta(
+                                                context,
+                                                'Para $subject',
+                                                Icons.people_outline,
+                                              ),
+                                          ],
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                TextButton(
-                                  onPressed: () => _openReport(report),
-                                  child: const Text('Ver  →'),
-                                ),
-                              ],
+                                  if (isOpen &&
+                                      DemoData.instance.canCloseReport(report))
+                                    IconButton(
+                                      tooltip: 'QR de cierre del flujo',
+                                      icon: const Icon(Icons.qr_code_2,
+                                          color: verde6Color),
+                                      onPressed: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              ReportQrScreen(report: report),
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    const Padding(
+                                      padding: EdgeInsets.only(left: 6),
+                                      child: Icon(Icons.chevron_right),
+                                    ),
+                                ],
+                              ),
                             ),
                           ),
                         );
@@ -330,6 +377,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
       },
     );
   }
+
+  Widget _reportMeta(BuildContext context, String label, IconData icon) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: verde6Color),
+          const SizedBox(width: 3),
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      );
 
   Widget _dateField(
       String label, String value, VoidCallback onTap, bool isDark) {
