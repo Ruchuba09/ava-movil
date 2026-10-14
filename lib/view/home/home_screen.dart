@@ -251,6 +251,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       });
                     },
                   ),
+                  ListTile(
+                    leading: const Icon(Icons.person_outline),
+                    title: const Text('Mis Reportes'),
+                    selected: !_showPermissions && _selectedIndex == 2,
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() {
+                        _selectedIndex = 2;
+                        _showPermissions = false;
+                      });
+                    },
+                  ),
                   ExpansionTile(
                     leading: const Icon(Icons.people_outline),
                     title: Text('Visualización y equipo (${workers.length})'),

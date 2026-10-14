@@ -83,6 +83,25 @@ void main() {
     );
   });
 
+  test('default user has self and third-party seeded reports', () {
+    final data = DemoData.instance;
+    data.signIn('carlos.gomez@empresa.cl');
+    final reports = data.currentUserReports;
+
+    expect(
+      reports.map((report) => report['id']),
+      containsAll(['#200', '#199', '#198']),
+    );
+    expect(
+      reports.firstWhere((report) => report['id'] == '#199')['isThirdParty'],
+      isTrue,
+    );
+    expect(
+      reports.firstWhere((report) => report['id'] == '#198')['subject'],
+      'Carlos Gómez',
+    );
+  });
+
   test('unfiltered worker report lists keep open reports first', () {
     final data = DemoData.instance;
     final sorted = data.openReportsFirst([
