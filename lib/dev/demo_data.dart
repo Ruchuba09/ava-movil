@@ -151,6 +151,15 @@ class DemoData extends ChangeNotifier {
           report['createdById'] == workerId)
       .toList();
 
+  List<Map<String, dynamic>> get currentUserReports {
+    final userId = currentUser['id'];
+    return reports
+        .where((report) =>
+            (report['createdById'] ?? report['reporterId']) == userId ||
+            report['subjectId'] == userId)
+        .toList();
+  }
+
   List<Map<String, dynamic>> openReportsFirst(
           Iterable<Map<String, dynamic>> source) =>
       [

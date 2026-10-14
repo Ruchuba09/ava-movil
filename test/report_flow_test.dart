@@ -24,6 +24,7 @@ void main() {
     expect(report['managerId'], 2);
     expect(report['originalManager'], 'Patricia Rojas');
     expect(data.reportsForWorker(21), contains(report));
+    expect(data.currentUserReports, contains(report));
     expect(report['createdAt'], isA<DateTime>());
     expect(report['hasConnectionAtCreation'], isTrue);
     expect(report['activityLog'], hasLength(2));
@@ -69,6 +70,17 @@ void main() {
         .length;
     expect(report['hasConnectionAtCreation'], isFalse);
     expect(managerNotificationsAfter, managerNotificationsBefore);
+  });
+
+  test('current user reports include cards assigned to the signed-in worker',
+      () {
+    final data = DemoData.instance;
+    data.signIn('andres.silva@empresa.cl');
+
+    expect(
+      data.currentUserReports.any((report) => report['subjectId'] == 21),
+      isTrue,
+    );
   });
 
   test('unfiltered worker report lists keep open reports first', () {
