@@ -1,7 +1,11 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/reports/report_qr_screen.dart';
+import 'package:avamovil/view/widgets/selection_field.dart';
 import 'package:image_picker/image_picker.dart';
 
 class NewReportScreen extends StatefulWidget {
@@ -18,6 +22,9 @@ class _NewReportScreenState extends State<NewReportScreen> {
   final List<XFile> _evidence = [];
   String _selectedProject = DemoData.projects.first;
   String? _selectedCondition;
+  int? _selectedSubjectId;
+  bool _isThirdParty = false;
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -27,31 +34,102 @@ class _NewReportScreenState extends State<NewReportScreen> {
   }
 
   Future<void> _pickEvidence() async {
-    final images = await ImagePicker().pickMultiImage();
-    if (images.isNotEmpty && mounted) {
-      setState(() => _evidence
-        ..clear()
-        ..addAll(images.take(3)));
+    final source = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Tomar foto'),
+              onTap: () => Navigator.pop(context, 'camera'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Elegir fotos'),
+              onTap: () => Navigator.pop(context, 'gallery'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.attach_file),
+              title: const Text('Elegir archivos'),
+              onTap: () => Navigator.pop(context, 'files'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null || !mounted) return;
+
+    try {
+      final picked = <XFile>[];
+      if (source == 'camera') {
+        final image = await ImagePicker().pickImage(source: ImageSource.camera);
+        if (image != null) picked.add(image);
+      } else if (source == 'gallery') {
+        picked.addAll(await ImagePicker().pickMultiImage());
+      } else {
+        final result = await FilePicker.platform.pickFiles(
+          type: FileType.any,
+          allowMultiple: true,
+        );
+        for (final file in result?.files ?? <PlatformFile>[]) {
+          if (file.path != null) picked.add(XFile(file.path!, name: file.name));
+        }
+      }
+      if (picked.isEmpty || !mounted) return;
+      final availableSlots = 3 - _evidence.length;
+      setState(() => _evidence.addAll(picked.take(availableSlots)));
+      if (picked.length > availableSlots) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Puedes adjuntar un máximo de 3 archivos.')),
+        );
+      }
+    } on PlatformException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo cargar la evidencia: ${error.message ?? error.code}')),
+        );
+      }
     }
   }
 
-  void _submitForm() {
-    if (_formKey.currentState!.validate()) {
-      DemoData.instance.addReport(
-        project: _selectedProject,
-        reference: _referenceController.text.trim(),
-        condition: _selectedCondition!,
-        description: _descriptionController.text.trim(),
-        evidence: _evidence.map((file) => file.path).toList(),
-      );
-      final report = DemoData.instance.reports.first;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ReportQrScreen(report: report),
-        ),
-      );
+  Future<void> _submitForm() async {
+    if (_isSubmitting || !_formKey.currentState!.validate()) return;
+    setState(() => _isSubmitting = true);
+    var hasSignal = false;
+    try {
+      final connectivity = await Connectivity().checkConnectivity();
+      hasSignal = connectivity.any((result) => result != ConnectivityResult.none);
+    } on PlatformException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                    'No se pudo verificar la conexión: ${error.message ?? error.code}')),
+        );
+      }
     }
+    final demoData = DemoData.instance;
+    demoData.addReport(
+      project: _selectedProject,
+      reference: _referenceController.text.trim(),
+      condition: _selectedCondition!,
+      description: _descriptionController.text.trim(),
+      evidence: _evidence.map((file) => file.path).toList(),
+      isThirdParty: _isThirdParty,
+      subjectWorkerId: _isThirdParty ? _selectedSubjectId : null,
+      hasConnection: hasSignal,
+    );
+    final report = demoData.reports.first;
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ReportQrScreen(report: report),
+      ),
+    );
   }
 
   @override
@@ -71,20 +149,10 @@ class _NewReportScreenState extends State<NewReportScreen> {
                 style: TextStyle(
                     color: isDark ? Colors.grey[400] : Colors.grey[700])),
             const SizedBox(height: 16),
-            if (constraints.maxWidth > 850)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: _buildForm(isDark)),
-                  const SizedBox(width: 16),
-                  SizedBox(width: 320, child: _buildGuide(isDark)),
-                ],
-              )
-            else ...[
-              _buildForm(isDark),
-              const SizedBox(height: 12),
-              _buildGuide(isDark),
-            ],
+            SizedBox(
+              width: constraints.maxWidth > 850 ? 720 : double.infinity,
+              child: _buildForm(isDark),
+            ),
           ],
         ),
       ),
@@ -102,24 +170,76 @@ class _NewReportScreenState extends State<NewReportScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('PROYECTO',
+                SelectionField<String>(
+                  label: 'PROYECTO',
+                  value: _selectedProject,
+                  options: DemoData.projects
+                      .map((project) =>
+                          SelectionOption(value: project, label: project))
+                      .toList(),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() {
+                          _selectedProject = value;
+                          _selectedSubjectId = null;
+                        });
+                  },
+                ),
+                const SizedBox(height: 14),
+                const Text('¿PARA QUIÉN ES EL REPORTE?',
                     style:
                         TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                 const SizedBox(height: 6),
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedProject,
-                  isExpanded: true,
-                  decoration: _inputDecoration(isDark),
-                  items: DemoData.projects
-                      .map((project) => DropdownMenuItem(
-                          value: project,
-                          child:
-                              Text(project, overflow: TextOverflow.ellipsis)))
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) setState(() => _selectedProject = value);
-                  },
+                Row(
+                  children: [
+                    Expanded(
+                      child: _reportSubjectChoice(
+                        label: 'Para mí',
+                        icon: Icons.person_outline,
+                        selected: !_isThirdParty,
+                        onTap: () => setState(() {
+                          _isThirdParty = false;
+                          _selectedSubjectId = null;
+                        }),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _reportSubjectChoice(
+                        label: 'Para un tercero',
+                        icon: Icons.people_outline,
+                        selected: _isThirdParty,
+                        onTap: () =>
+                            setState(() => _isThirdParty = true),
+                      ),
+                    ),
+                  ],
                 ),
+                if (_isThirdParty) ...[
+                  const SizedBox(height: 10),
+                  SelectionField<int>(
+                    key: ValueKey(_selectedProject),
+                    label: 'PERSONA REPORTADA',
+                    hint: 'Selecciona a la persona reportada',
+                    value: _selectedSubjectId,
+                    options: DemoData.instance
+                        .workersForProject(_selectedProject)
+                        .map((worker) => SelectionOption<int>(
+                              value: worker['id'] as int,
+                              label: worker['name'] as String,
+                            ))
+                        .toList(),
+                    onChanged: (value) =>
+                        setState(() => _selectedSubjectId = value),
+                    validator: (value) => _isThirdParty && value == null
+                        ? DemoData.instance
+                                .workersForProject(_selectedProject)
+                                .isEmpty
+                            ? 'No hay personas disponibles para este proyecto'
+                            : 'Selecciona a la persona reportada'
+                        : null,
+                  ),
+                ],
                 const SizedBox(height: 14),
                 const Text('REFERENCIA',
                     style:
@@ -134,20 +254,15 @@ class _NewReportScreenState extends State<NewReportScreen> {
                       : null,
                 ),
                 const SizedBox(height: 14),
-                const Text('CONDICIÓN DEL EVENTO (PARE)',
-                    style:
-                        TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                const SizedBox(height: 6),
-                DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  decoration: _inputDecoration(isDark),
-                  hint: const Text('Seleccione la condición identificada'),
-                  initialValue: _selectedCondition,
-                  items: DemoData.conditions
-                      .map((condition) => DropdownMenuItem(
-                          value: condition,
-                          child: Text(condition,
-                              maxLines: 2, overflow: TextOverflow.ellipsis)))
+                SelectionField<String>(
+                  label: 'CONDICIÓN DEL EVENTO (PARE)',
+                  hint: 'Seleccione la condición identificada',
+                  value: _selectedCondition,
+                  options: DemoData.conditions
+                      .map((condition) => SelectionOption(
+                            value: condition,
+                            label: condition,
+                          ))
                       .toList(),
                   onChanged: (value) =>
                       setState(() => _selectedCondition = value),
@@ -180,7 +295,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
                     OutlinedButton.icon(
                         onPressed: _pickEvidence,
                         icon: const Icon(Icons.upload_file),
-                        label: const Text('Elegir archivos')),
+                        label: const Text('Agregar evidencia')),
                     Text(
                         _evidence.isEmpty
                             ? 'Ningún archivo seleccionado'
@@ -197,10 +312,18 @@ class _NewReportScreenState extends State<NewReportScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
-                    onPressed: _submitForm,
-                    icon: const Icon(Icons.check),
-                    label: const Text('Registrar evento',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    onPressed: _isSubmitting ? null : _submitForm,
+                    icon: _isSubmitting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.check),
+                    label: Text(
+                      _isSubmitting ? 'Guardando...' : 'Registrar evento',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     style: ElevatedButton.styleFrom(
                         backgroundColor: verde6Color,
                         foregroundColor: Colors.white,
@@ -215,52 +338,36 @@ class _NewReportScreenState extends State<NewReportScreen> {
         ),
       );
 
-  Widget _buildGuide(bool isDark) => Card(
-        elevation: 1,
-        color: isDark ? gris2Color : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('GUÍA DE CONDICIONES DE USO',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-              const SizedBox(height: 8),
-              ...DemoData.conditions.map((condition) {
-                final selected = condition == _selectedCondition;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 5),
-                  child: Material(
-                    color: selected
-                        ? verde5Color.withValues(alpha: 0.3)
-                        : (isDark ? Colors.white10 : verde1Color),
-                    borderRadius: BorderRadius.circular(6),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(6),
-                      onTap: () =>
-                          setState(() => _selectedCondition = condition),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 9, vertical: 8),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(condition.substring(0, 3),
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold, fontSize: 11)),
-                            const SizedBox(width: 6),
-                            Expanded(
-                                child: Text(condition.substring(4),
-                                    style: const TextStyle(fontSize: 11))),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }),
-            ],
+  Widget _reportSubjectChoice({
+    required String label,
+    required IconData icon,
+    required bool selected,
+    required VoidCallback onTap,
+  }) =>
+      Material(
+        color: selected ? verde5Color.withValues(alpha: 0.2) : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+            decoration: BoxDecoration(
+              border: Border.all(
+                  color: selected ? verde6Color : Colors.grey.shade500),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 18, color: selected ? verde6Color : null),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(label,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+              ],
+            ),
           ),
         ),
       );

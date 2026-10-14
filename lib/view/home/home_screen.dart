@@ -5,7 +5,6 @@ import 'package:google_nav_bar/google_nav_bar.dart';
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/auth/login_screen.dart';
-import 'package:avamovil/view/dashboard/dashboard_screen.dart';
 import 'package:avamovil/view/reports/reports_screen.dart';
 import 'package:avamovil/view/reports/new_report_screen.dart';
 import 'package:avamovil/view/reports/report_detail_screen.dart';
@@ -24,9 +23,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _showPermissions = false;
 
   static const List<Widget> _widgetOptions = <Widget>[
-    DashboardScreen(),
-    ReportsScreen(),
     NewReportScreen(),
+    ReportsScreen(),
   ];
 
   Future<void> _showNotifications() async {
@@ -75,6 +73,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
         ),
         actions: [
+          if (notifications.any((notification) => notification['read'] == true))
+            TextButton.icon(
+              onPressed: () {
+                demoData.deleteReadNotifications();
+                Navigator.pop(dialogContext);
+              },
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Eliminar leídas'),
+            ),
           TextButton(
               onPressed: () => Navigator.pop(dialogContext),
               child: const Text('Cerrar'))
@@ -179,126 +186,138 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
+        child: Column(
           children: [
-            DrawerHeader(
-              decoration: const BoxDecoration(
-                color: verde5Color,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
                 children: [
-                  Text(
-                    currentUser['name'] as String,
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
+                  DrawerHeader(
+                      decoration: const BoxDecoration(
+                        color: verde5Color,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          SvgPicture.asset(
+                            isDark
+                                ? 'assets/logos/blanco.svg'
+                                : 'assets/logos/negro.svg',
+                            height: 36,
+                            fit: BoxFit.contain,
+                            placeholderBuilder: (context) => const Text(
+                              'AVA',
+                              style: TextStyle(
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                currentUser['name'] as String,
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                              Text(
+                                currentUser['email'] as String,
+                                style: const TextStyle(
+                                  color: Colors.black54,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              Text(currentUser['role'] as String,
+                                  style: const TextStyle(
+                                      color: Colors.black54, fontSize: 12)),
+                            ],
+                          ),
+                        ],
+                      ),
                   ),
-                  Text(
-                    currentUser['email'] as String,
-                    style: TextStyle(
-                      color: Colors.black54,
-                      fontSize: 14,
-                    ),
+                  ListTile(
+                    leading: const Icon(Icons.list_alt),
+                    title: const Text('Listado Tarjeta PARE'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() {
+                        _selectedIndex = 1;
+                        _showPermissions = false;
+                      });
+                    },
                   ),
-                  Text(currentUser['role'] as String,
-                      style: TextStyle(color: Colors.black54, fontSize: 12)),
+                  ExpansionTile(
+                    leading: const Icon(Icons.people_outline),
+                    title: Text('Visualización y equipo (${workers.length})'),
+                    children: [
+                      ListTile(
+                        contentPadding:
+                            const EdgeInsets.only(left: 56, right: 16),
+                        leading: const Icon(Icons.visibility_outlined),
+                        title: const Text('Visualización de cuadrilla'),
+                        onTap: () {
+                          Navigator.pop(context);
+                          setState(() => _showPermissions = true);
+                        },
+                      ),
+                      ...workers.map((worker) => ListTile(
+                            dense: true,
+                            contentPadding:
+                                const EdgeInsets.only(left: 56, right: 16),
+                            leading:
+                                const Icon(Icons.person_outline, size: 18),
+                            title: Text(worker['name'] as String),
+                            subtitle: Text(worker['role'] as String),
+                            onTap: () {
+                              Navigator.pop(context);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      WorkerProfileScreen(worker: worker),
+                                ),
+                              );
+                            },
+                          )),
+                    ],
+                  ),
                 ],
               ),
             ),
-            ListTile(
-              leading: const Icon(Icons.home),
-              title: const Text('Inicio'),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() {
-                  _selectedIndex = 0;
-                  _showPermissions = false;
-                });
-              },
+            const Divider(height: 1),
+            SafeArea(
+              top: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Consumer<ThemeController>(
+                    builder: (context, themeController, child) {
+                      final darkMode =
+                          themeController.themeMode == ThemeMode.dark ||
+                              (themeController.themeMode == ThemeMode.system &&
+                                  MediaQuery.of(context).platformBrightness ==
+                                      Brightness.dark);
+                      return SwitchListTile(
+                        title: const Text('Modo Oscuro'),
+                        secondary: const Icon(Icons.dark_mode),
+                        value: darkMode,
+                        activeThumbColor: verde6Color,
+                        onChanged: themeController.toggleTheme,
+                      );
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.logout),
+                    title: const Text('Cerrar sesión'),
+                    onTap: _signOut,
+                  ),
+                ],
+              ),
             ),
-            ListTile(
-              leading: const Icon(Icons.dashboard),
-              title: const Text('Dashboard'),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() {
-                  _selectedIndex = 0;
-                  _showPermissions = false;
-                });
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.list_alt),
-              title: const Text('Reportes'),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() {
-                  _selectedIndex = 1;
-                  _showPermissions = false;
-                });
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.lock),
-              title: const Text('Permisos'),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() => _showPermissions = true);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.people),
-              title: Text('Trabajadores a cargo (${workers.length})'),
-              subtitle: Text(currentUser['name'] as String),
-              onTap: () {
-                Navigator.pop(context);
-                setState(() => _showPermissions = true);
-              },
-            ),
-            ...workers.map((worker) => ListTile(
-                  dense: true,
-                  contentPadding: const EdgeInsets.only(left: 56, right: 16),
-                  leading: const Icon(Icons.person_outline, size: 18),
-                  title: Text(worker['name'] as String),
-                  subtitle: Text(worker['role'] as String),
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            WorkerProfileScreen(worker: worker),
-                      ),
-                    );
-                  },
-                )),
-            ListTile(
-              leading: const Icon(Icons.logout),
-              title: const Text('Cerrar sesión'),
-              onTap: _signOut,
-            ),
-            const Divider(),
-            Consumer<ThemeController>(
-                builder: (context, themeController, child) {
-              final isDark = themeController.themeMode == ThemeMode.dark ||
-                  (themeController.themeMode == ThemeMode.system &&
-                      MediaQuery.of(context).platformBrightness ==
-                          Brightness.dark);
-              return SwitchListTile(
-                title: const Text('Modo Oscuro'),
-                secondary: const Icon(Icons.dark_mode),
-                value: isDark,
-                activeThumbColor: verde6Color,
-                onChanged: (value) {
-                  themeController.toggleTheme(value);
-                },
-              );
-            }),
           ],
         ),
       ),
@@ -330,16 +349,12 @@ class _HomeScreenState extends State<HomeScreen> {
               color: isDark ? Colors.white : Colors.black,
               tabs: const [
                 GButton(
-                  icon: Icons.dashboard,
-                  text: 'Dashboard',
+                  icon: Icons.add_box,
+                  text: 'Crear Tarjeta',
                 ),
                 GButton(
                   icon: Icons.list_alt,
-                  text: 'Reportes',
-                ),
-                GButton(
-                  icon: Icons.add_box,
-                  text: 'Nueva Tarjeta',
+                  text: 'Listado PARE',
                 ),
               ],
               selectedIndex: _selectedIndex,

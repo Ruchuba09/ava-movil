@@ -131,7 +131,6 @@ class DemoData extends ChangeNotifier {
 
   final List<Map<String, dynamic>> reports = [];
   final List<Map<String, dynamic>> notifications = [];
-  final Map<int, Map<String, dynamic>> actingAssignments = {};
   int _nextNotificationId = 3;
 
   Map<String, dynamic> currentUser = {
@@ -146,52 +145,34 @@ class DemoData extends ChangeNotifier {
       .where((worker) => worker['leaderId'] == currentUser['id'])
       .toList();
 
-  List<Map<String, dynamic>> reportsForWorker(int workerId) =>
-      reports.where((report) => report['reporterId'] == workerId).toList();
+  List<Map<String, dynamic>> reportsForWorker(int workerId) => reports
+      .where((report) =>
+          (report['subjectId'] ?? report['reporterId']) == workerId ||
+          report['createdById'] == workerId)
+      .toList();
 
-  Map<String, dynamic>? actingAssignmentFor(int leaderId) {
-    final assignment = actingAssignments[leaderId];
-    if (assignment == null) return null;
-    final until = assignment['until'] as DateTime;
-    if (until.isBefore(DateTime.now())) return null;
-    return assignment;
+  List<Map<String, dynamic>> openReportsFirst(
+          Iterable<Map<String, dynamic>> source) =>
+      [
+        ...source.where((report) => report['status'] == 'ABIERTA'),
+        ...source.where((report) => report['status'] != 'ABIERTA'),
+      ];
+
+  int leaderIdForProject(String project) {
+    final manager = _users.where((user) => user['project'] == project);
+    return (manager.isEmpty ? _users.first : manager.first)['id'] as int;
+  }
+
+  List<Map<String, dynamic>> workersForProject(String project) {
+    final leaderId = leaderIdForProject(project);
+    return workers
+        .where((worker) => worker['leaderId'] == leaderId)
+        .toList();
   }
 
   bool canCloseReport(Map<String, dynamic> report) {
     final managerId = report['managerId'] as int;
-    if (currentUser['id'] == managerId) return true;
-    final assignment = actingAssignmentFor(managerId);
-    return assignment?['workerId'] == currentUser['id'];
-  }
-
-  void assignActingManager({
-    required int leaderId,
-    required int workerId,
-    required DateTime until,
-  }) {
-    final belongsToLeader = workers.any(
-        (worker) => worker['id'] == workerId && worker['leaderId'] == leaderId);
-    if (!belongsToLeader || !until.isAfter(DateTime.now())) return;
-    actingAssignments[leaderId] = {
-      'workerId': workerId,
-      'until': DateTime(until.year, until.month, until.day, 23, 59),
-    };
-    final pendingReports = reports.where((report) =>
-        report['managerId'] == leaderId && report['status'] == 'ABIERTA');
-    for (final report in pendingReports) {
-      _addNotification(
-        recipientId: workerId,
-        reportId: report['id'] as String,
-        title: 'Flujo delegado para cierre',
-        message: 'Quedaste a cargo temporal de cerrar este reporte PARE.',
-      );
-    }
-    notifyListeners();
-  }
-
-  void clearActingManager(int leaderId) {
-    actingAssignments.remove(leaderId);
-    notifyListeners();
+    return currentUser['id'] == managerId;
   }
 
   List<Map<String, dynamic>> get currentUserNotifications => notifications
@@ -230,47 +211,106 @@ class DemoData extends ChangeNotifier {
     required String condition,
     required String description,
     required List<String> evidence,
+    required bool isThirdParty,
+    int? subjectWorkerId,
+    bool hasConnection = true,
   }) {
-    final managerId = project == projects[1] ? 2 : 1;
-    final manager = _users.firstWhere((user) => user['id'] == managerId);
-    final assignment = actingAssignmentFor(managerId);
-    final responsibleId = assignment?['workerId'] as int? ?? managerId;
-    final responsible = responsibleId == managerId
-        ? manager
-        : workers.firstWhere((worker) => worker['id'] == responsibleId);
-    final reportId = '#${200 + reports.length}';
+    if (isThirdParty && subjectWorkerId == null) {
+      throw ArgumentError('Debe seleccionar a la persona reportada.');
+    }
+    final subjectWorker = isThirdParty
+        ? workers.firstWhere((worker) =>
+            worker['id'] == subjectWorkerId &&
+            worker['leaderId'] == leaderIdForProject(project))
+        : null;
     final reporter = currentUser;
+    final managerId = subjectWorker?['leaderId'] as int? ??
+        (workers.any((worker) => worker['id'] == reporter['id'])
+            ? workers.firstWhere((worker) => worker['id'] == reporter['id'])[
+                'leaderId'] as int
+            : leaderIdForProject(project));
+    final manager = _users.firstWhere((user) => user['id'] == managerId);
+    final responsibleId = managerId;
+    final responsible = manager;
+    final reportId = '#${200 + reports.length}';
+    final subject = subjectWorker ?? reporter;
+    final createdAt = DateTime.now();
     final report = <String, dynamic>{
       'id': reportId,
       'project': project,
       'condition': '#${conditions.indexOf(condition) + 1}',
       'conditionText': condition,
       'reference': reference,
-      'date': DateTime.now(),
+      'date': createdAt,
+      'createdAt': createdAt,
       'status': 'ABIERTA',
+      'hasConnectionAtCreation': hasConnection,
       'reporterId': reporter['id'],
       'reporter': reporter['name'],
+      'createdById': reporter['id'],
+      'createdBy': reporter['name'],
+      'isThirdParty': isThirdParty,
+      'subjectId': subject['id'],
+      'subject': subject['name'],
       'managerId': managerId,
       'manager': responsible['name'],
       'originalManager': manager['name'],
       'description': description,
       'evidence': evidence,
       'closeDescription': '',
+      'activityLog': <Map<String, dynamic>>[
+        {
+          'type': 'created',
+          'description': 'Tarjeta PARE creada',
+          'at': createdAt,
+        },
+        {
+          'type': 'connection',
+          'description': hasConnection
+              ? 'Conexión disponible; notificación interna registrada para el encargado'
+              : 'Sin conexión; se debe informar al encargado para completar el cierre',
+          'at': createdAt,
+        },
+      ],
     };
     reports.insert(0, report);
-    _addNotification(
-      recipientId: responsibleId,
-      reportId: reportId,
-      title: 'Nuevo reporte PARE asignado',
-      message: '${reporter['name']} registró un hallazgo en $project.',
-    );
+    if (hasConnection) {
+      _addNotification(
+        recipientId: responsibleId,
+        reportId: reportId,
+        title: 'Nuevo reporte PARE asignado',
+        message: isThirdParty
+            ? '${reporter['name']} registró un hallazgo para ${subject['name']} en $project.'
+            : '${reporter['name']} registró un hallazgo en $project.',
+      );
+    }
     notifyListeners();
   }
 
-  void closeReport(Map<String, dynamic> report, String closeDescription) {
+  void closeReport(
+    Map<String, dynamic> report,
+    String closeDescription,
+    List<String> evidence,
+  ) {
+    if (closeDescription.trim().isEmpty) {
+      throw ArgumentError('La descripción del cierre es obligatoria.');
+    }
+    if (evidence.isEmpty) {
+      throw ArgumentError('Debe adjuntar al menos una evidencia de cierre.');
+    }
     report['status'] = 'CERRADA';
-    report['closeDescription'] = closeDescription;
-    report['closedAt'] = DateTime.now();
+    report['closeDescription'] = closeDescription.trim();
+    report['closeEvidence'] = List<String>.from(evidence);
+    final closedAt = DateTime.now();
+    report['closedAt'] = closedAt;
+    final activityLog =
+        report['activityLog'] as List<Map<String, dynamic>>? ?? [];
+    activityLog.add({
+      'type': 'closed',
+      'description': 'Flujo cerrado por ${currentUser['name']}',
+      'at': closedAt,
+    });
+    report['activityLog'] = activityLog;
     _addNotification(
       recipientId: report['reporterId'] as int,
       reportId: report['id'] as String,
@@ -283,6 +323,13 @@ class DemoData extends ChangeNotifier {
 
   void markNotificationRead(Map<String, dynamic> notification) {
     notification['read'] = true;
+    notifyListeners();
+  }
+
+  void deleteReadNotifications() {
+    final userId = currentUser['id'];
+    notifications.removeWhere((notification) =>
+        notification['recipientId'] == userId && notification['read'] == true);
     notifyListeners();
   }
 
@@ -299,6 +346,7 @@ class DemoData extends ChangeNotifier {
       'title': title,
       'message': message,
       'read': false,
+      'createdAt': DateTime.now(),
     });
   }
 
@@ -317,6 +365,16 @@ class DemoData extends ChangeNotifier {
       final managerId = projectIndex == 1 ? 2 : 1;
       final date = seedDate.subtract(Duration(days: index % 38));
       final isClosed = index % 3 == 0;
+      final createdAt = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        7 + index % 11,
+        (index * 7) % 60,
+      );
+      final closedAt = isClosed
+          ? createdAt.add(Duration(minutes: 20 + (index * 13) % 120))
+          : null;
       reports.add({
         'id': '#${200 - index}',
         'project': project,
@@ -329,7 +387,10 @@ class DemoData extends ChangeNotifier {
           'Plataforma de montaje, Sector B',
         ][index % 4],
         'date': date,
+        'createdAt': createdAt,
         'status': isClosed ? 'CERRADA' : 'ABIERTA',
+        if (closedAt != null) 'closedAt': closedAt,
+        'hasConnectionAtCreation': true,
         'reporterId': 11 + (index % 4),
         'reporter': reporters[index % reporters.length],
         'managerId': managerId,
@@ -344,6 +405,19 @@ class DemoData extends ChangeNotifier {
         'closeDescription': isClosed
             ? 'Se corrigió la condición y se verificó el área antes de reiniciar la actividad.'
             : '',
+        'activityLog': <Map<String, dynamic>>[
+          {
+            'type': 'created',
+            'description': 'Tarjeta PARE creada',
+            'at': createdAt,
+          },
+          if (closedAt != null)
+            {
+              'type': 'closed',
+              'description': 'Flujo cerrado',
+              'at': closedAt,
+            },
+        ],
       });
     }
   }
