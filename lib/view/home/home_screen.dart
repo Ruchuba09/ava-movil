@@ -25,6 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
   static const List<Widget> _widgetOptions = <Widget>[
     NewReportScreen(),
     ReportsScreen(),
+    ReportsScreen(onlyCurrentUser: true),
   ];
 
   Future<void> _showNotifications() async {
@@ -250,6 +251,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       });
                     },
                   ),
+                  ListTile(
+                    leading: const Icon(Icons.person_outline),
+                    title: const Text('Mis Reportes'),
+                    selected: !_showPermissions && _selectedIndex == 2,
+                    onTap: () {
+                      Navigator.pop(context);
+                      setState(() {
+                        _selectedIndex = 2;
+                        _showPermissions = false;
+                      });
+                    },
+                  ),
                   ExpansionTile(
                     leading: const Icon(Icons.people_outline),
                     title: Text('Visualización y equipo (${workers.length})'),
@@ -355,6 +368,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 GButton(
                   icon: Icons.list_alt,
                   text: 'Listado PARE',
+                ),
+                GButton(
+                  icon: Icons.person_outline,
+                  text: 'Mis Reportes',
                 ),
               ],
               selectedIndex: _selectedIndex,

@@ -151,6 +151,15 @@ class DemoData extends ChangeNotifier {
           report['createdById'] == workerId)
       .toList();
 
+  List<Map<String, dynamic>> get currentUserReports {
+    final userId = currentUser['id'];
+    return reports
+        .where((report) =>
+            (report['createdById'] ?? report['reporterId']) == userId ||
+            report['subjectId'] == userId)
+        .toList();
+  }
+
   List<Map<String, dynamic>> openReportsFirst(
           Iterable<Map<String, dynamic>> source) =>
       [
@@ -351,12 +360,6 @@ class DemoData extends ChangeNotifier {
   }
 
   void _seedReports() {
-    const reporters = [
-      'Juan Pérez',
-      'María Soto',
-      'Diego Fuentes',
-      'Camila Torres'
-    ];
     final seedDate = DateTime(2026, 10, 8);
     for (var index = 0; index < 48; index++) {
       final projectIndex = index % projects.length;
@@ -375,6 +378,21 @@ class DemoData extends ChangeNotifier {
       final closedAt = isClosed
           ? createdAt.add(Duration(minutes: 20 + (index * 13) % 120))
           : null;
+      final baseReporterId = 11 + (index % 4);
+      final reporterId = index == 2 ? 14 : (index < 2 ? 1 : baseReporterId);
+      final reporter = reporterId == 1
+          ? 'Carlos Gómez'
+          : workers.firstWhere((worker) => worker['id'] == reporterId)['name']
+              as String;
+      final subjectId = index == 0 || index == 2
+          ? 1
+          : (index == 1 ? 21 : reporterId);
+      final subject = subjectId == 1
+          ? 'Carlos Gómez'
+          : workers.firstWhere((worker) => worker['id'] == subjectId)['name']
+              as String;
+      final createdById = index == 2 ? reporterId : (index < 2 ? 1 : reporterId);
+      final manager = managerId == 1 ? 'Carlos Gómez' : 'Patricia Rojas';
       reports.add({
         'id': '#${200 - index}',
         'project': project,
@@ -391,10 +409,16 @@ class DemoData extends ChangeNotifier {
         'status': isClosed ? 'CERRADA' : 'ABIERTA',
         if (closedAt != null) 'closedAt': closedAt,
         'hasConnectionAtCreation': true,
-        'reporterId': 11 + (index % 4),
-        'reporter': reporters[index % reporters.length],
+        'reporterId': reporterId,
+        'reporter': reporter,
+        'createdById': createdById,
+        'createdBy': reporter,
+        'subjectId': subjectId,
+        'subject': subject,
+        'isThirdParty': subjectId != createdById,
         'managerId': managerId,
-        'manager': managerId == 1 ? 'Carlos Gómez' : 'Patricia Rojas',
+        'manager': manager,
+        'originalManager': manager,
         'description': [
           'Se detectó una condición insegura durante la inspección del área de trabajo.',
           'El equipo asignado presenta desgaste y requiere revisión antes de continuar.',
