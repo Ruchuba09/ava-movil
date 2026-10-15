@@ -82,13 +82,16 @@ class _NewReportScreenState extends State<NewReportScreen> {
       setState(() => _evidence.addAll(picked.take(availableSlots)));
       if (picked.length > availableSlots) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Puedes adjuntar un máximo de 3 archivos.')),
+          const SnackBar(
+              content: Text('Puedes adjuntar un máximo de 3 archivos.')),
         );
       }
     } on PlatformException catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No se pudo cargar la evidencia: ${error.message ?? error.code}')),
+          SnackBar(
+              content: Text(
+                  'No se pudo cargar la evidencia: ${error.message ?? error.code}')),
         );
       }
     }
@@ -100,13 +103,14 @@ class _NewReportScreenState extends State<NewReportScreen> {
     var hasSignal = false;
     try {
       final connectivity = await Connectivity().checkConnectivity();
-      hasSignal = connectivity.any((result) => result != ConnectivityResult.none);
+      hasSignal =
+          connectivity.any((result) => result != ConnectivityResult.none);
     } on PlatformException catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text(
-                    'No se pudo verificar la conexión: ${error.message ?? error.code}')),
+                  'No se pudo verificar la conexión: ${error.message ?? error.code}')),
         );
       }
     }
@@ -142,7 +146,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Ingreso de Reporte',
+            const Text('Ingreso de Tarjeta Pare',
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
             Text('Registra un evento detallando la condición y la descripción.',
@@ -177,12 +181,12 @@ class _NewReportScreenState extends State<NewReportScreen> {
                       .map((project) =>
                           SelectionOption(value: project, label: project))
                       .toList(),
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setState(() {
-                          _selectedProject = value;
-                          _selectedSubjectId = null;
-                        });
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() {
+                      _selectedProject = value;
+                      _selectedSubjectId = null;
+                    });
                   },
                 ),
                 const SizedBox(height: 14),
@@ -209,8 +213,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
                         label: 'Para un tercero',
                         icon: Icons.people_outline,
                         selected: _isThirdParty,
-                        onTap: () =>
-                            setState(() => _isThirdParty = true),
+                        onTap: () => setState(() => _isThirdParty = true),
                       ),
                     ),
                   ],
@@ -345,7 +348,8 @@ class _NewReportScreenState extends State<NewReportScreen> {
     required VoidCallback onTap,
   }) =>
       Material(
-        color: selected ? verde5Color.withValues(alpha: 0.2) : Colors.transparent,
+        color:
+            selected ? verde5Color.withValues(alpha: 0.2) : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           onTap: onTap,
@@ -363,8 +367,8 @@ class _NewReportScreenState extends State<NewReportScreen> {
                 Icon(icon, size: 18, color: selected ? verde6Color : null),
                 const SizedBox(width: 6),
                 Flexible(
-                  child: Text(label,
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  child:
+                      Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
                 ),
               ],
             ),
