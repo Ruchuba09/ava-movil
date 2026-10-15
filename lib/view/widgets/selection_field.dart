@@ -38,7 +38,8 @@ class SelectionField<T> extends StatelessWidget {
           final isDark = Theme.of(sheetContext).brightness == Brightness.dark;
           return Container(
             constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(sheetContext).size.height * 0.72,
+              maxHeight: MediaQuery.of(sheetContext).size.height *
+                  (wrapOptionLabels ? 0.94 : 0.72),
             ),
             decoration: BoxDecoration(
               color: isDark ? gris2Color : Colors.white,
