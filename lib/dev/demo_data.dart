@@ -270,7 +270,7 @@ class DemoData extends ChangeNotifier {
       'activityLog': <Map<String, dynamic>>[
         {
           'type': 'created',
-          'description': 'Tarjeta PARE creada',
+          'description': 'Tarjeta PARE creada por ${reporter['name']}',
           'at': createdAt,
         },
         {
@@ -318,6 +318,8 @@ class DemoData extends ChangeNotifier {
       'type': 'closed',
       'description': 'Flujo cerrado por ${currentUser['name']}',
       'at': closedAt,
+      'actorId': currentUser['id'],
+      'actor': currentUser['name'],
     });
     report['activityLog'] = activityLog;
     _addNotification(
@@ -330,8 +332,39 @@ class DemoData extends ChangeNotifier {
     notifyListeners();
   }
 
+  void recordReportViewed(Map<String, dynamic> report) {
+    final activityLog =
+        report['activityLog'] as List<Map<String, dynamic>>? ?? [];
+    activityLog.add({
+      'type': 'viewed',
+      'description': 'Tarjeta visualizada por ${currentUser['name']}',
+      'at': DateTime.now(),
+      'actorId': currentUser['id'],
+      'actor': currentUser['name'],
+    });
+    report['activityLog'] = activityLog;
+    notifyListeners();
+  }
+
   void markNotificationRead(Map<String, dynamic> notification) {
+    if (notification['read'] == true) return;
     notification['read'] = true;
+    final report = reports.where(
+      (item) => item['id'] == notification['reportId'],
+    );
+    if (report.isNotEmpty) {
+      final activityLog =
+          report.first['activityLog'] as List<Map<String, dynamic>>? ?? [];
+      activityLog.add({
+        'type': 'notification_viewed',
+        'description':
+            'Notificación del reporte visualizada por ${currentUser['name']}',
+        'at': DateTime.now(),
+        'actorId': currentUser['id'],
+        'actor': currentUser['name'],
+      });
+      report.first['activityLog'] = activityLog;
+    }
     notifyListeners();
   }
 

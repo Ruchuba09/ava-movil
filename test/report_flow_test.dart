@@ -29,6 +29,10 @@ void main() {
     expect(report['hasConnectionAtCreation'], isTrue);
     expect(report['activityLog'], hasLength(2));
 
+    data.recordReportViewed(report);
+    expect(report['activityLog'], hasLength(3));
+    expect(report['activityLog'].last['type'], 'viewed');
+
     expect(
       () => data.closeReport(report, ' ', const ['evidencia.jpg']),
       throwsArgumentError,
@@ -44,7 +48,7 @@ void main() {
     expect(report['closeDescription'], 'Cierre válido');
     expect(report['closeEvidence'], ['evidencia.jpg']);
     expect(report['closedAt'], isA<DateTime>());
-    expect(report['activityLog'], hasLength(3));
+    expect(report['activityLog'], hasLength(4));
   });
 
   test('offline report keeps QR connection status without notifying manager',

@@ -8,6 +8,7 @@ import 'package:avamovil/view/auth/login_screen.dart';
 import 'package:avamovil/view/reports/reports_screen.dart';
 import 'package:avamovil/view/reports/new_report_screen.dart';
 import 'package:avamovil/view/reports/report_detail_screen.dart';
+import 'package:avamovil/view/reports/report_qr_scanner_screen.dart';
 import 'package:avamovil/view/permissions/permissions_screen.dart';
 import 'package:avamovil/controller/theme_controller.dart';
 
@@ -126,6 +127,16 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                IconButton(
+                  tooltip: 'Escanear QR de Tarjeta PARE',
+                  icon: const Icon(Icons.qr_code_scanner),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (context) => const ReportQrScannerScreen(),
+                    ),
+                  ),
+                ),
                 AnimatedBuilder(
                   animation: demoData,
                   builder: (context, child) => IconButton(

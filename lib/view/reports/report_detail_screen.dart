@@ -28,6 +28,12 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   bool _showReportEvidence = false;
 
   @override
+  void initState() {
+    super.initState();
+    DemoData.instance.recordReportViewed(widget.report);
+  }
+
+  @override
   void dispose() {
     _descController.dispose();
     super.dispose();
