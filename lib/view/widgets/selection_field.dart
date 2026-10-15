@@ -13,6 +13,7 @@ class SelectionField<T> extends StatelessWidget {
   final T? value;
   final List<SelectionOption<T>> options;
   final List<List<SelectionOption<T>>>? optionRows;
+  final bool wrapOptionLabels;
   final String hint;
   final ValueChanged<T?> onChanged;
   final String? Function(T?)? validator;
@@ -24,6 +25,7 @@ class SelectionField<T> extends StatelessWidget {
     required this.options,
     required this.onChanged,
     this.optionRows,
+    this.wrapOptionLabels = false,
     this.hint = 'Selecciona una opción',
     this.validator,
   });
@@ -36,7 +38,8 @@ class SelectionField<T> extends StatelessWidget {
           final isDark = Theme.of(sheetContext).brightness == Brightness.dark;
           return Container(
             constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(sheetContext).size.height * 0.72,
+              maxHeight: MediaQuery.of(sheetContext).size.height *
+                  (wrapOptionLabels ? 0.94 : 0.72),
             ),
             decoration: BoxDecoration(
               color: isDark ? gris2Color : Colors.white,
@@ -128,7 +131,10 @@ class SelectionField<T> extends StatelessWidget {
         onTap: () => Navigator.pop(sheetContext, option.value),
         child: Container(
           constraints: const BoxConstraints(minHeight: 42),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          padding: EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: wrapOptionLabels ? 12 : 8,
+          ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -136,15 +142,14 @@ class SelectionField<T> extends StatelessWidget {
                 child: Text(
                   option.label,
                   textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  maxLines: wrapOptionLabels ? null : 1,
+                  overflow: wrapOptionLabels ? null : TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 12),
                 ),
               ),
               if (selected) ...[
                 const SizedBox(width: 2),
-                const Icon(Icons.check_circle,
-                    color: verde6Color, size: 16),
+                const Icon(Icons.check_circle, color: verde6Color, size: 16),
               ],
             ],
           ),
@@ -190,8 +195,8 @@ class SelectionField<T> extends StatelessWidget {
               Expanded(
                 child: Text(
                   selectedLabel ?? hint,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  maxLines: wrapOptionLabels ? null : 1,
+                  overflow: wrapOptionLabels ? null : TextOverflow.ellipsis,
                   style: TextStyle(
                     color: selectedLabel == null
                         ? Theme.of(context).hintColor

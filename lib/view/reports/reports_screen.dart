@@ -304,6 +304,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         final subject =
                             (report['subject'] ?? report['reporter'])
                                 .toString();
+                        final createdBy =
+                            (report['createdBy'] ?? report['reporter'])
+                                .toString();
                         final statusColor =
                             isOpen ? const Color(0xFFFF542E) : Colors.cyan;
                         final cardColor = isOpen
@@ -332,17 +335,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
-                                  CircleAvatar(
-                                    radius: 20,
-                                    backgroundColor:
-                                        statusColor.withValues(alpha: 0.16),
-                                    child: Text(report['id'] as String,
-                                        style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 10)
-                                            .copyWith(color: statusColor)),
-                                  ),
-                                  const SizedBox(width: 10),
+                                  if (widget.onlyCurrentUser) ...[
+                                    CircleAvatar(
+                                      radius: 20,
+                                      backgroundColor:
+                                          statusColor.withValues(alpha: 0.16),
+                                      child: Text(report['id'] as String,
+                                          style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 10)
+                                              .copyWith(color: statusColor)),
+                                    ),
+                                    const SizedBox(width: 10),
+                                  ],
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment:
@@ -352,12 +357,23 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                           children: [
                                             Expanded(
                                               child: Text(
-                                                report['project'] as String,
-                                                style: const TextStyle(
-                                                    fontWeight:
-                                                        FontWeight.bold),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
+                                                widget.onlyCurrentUser
+                                                    ? report['project']
+                                                        as String
+                                                    : createdBy,
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize:
+                                                      widget.onlyCurrentUser
+                                                          ? null
+                                                          : 17,
+                                                ),
+                                                maxLines: widget.onlyCurrentUser
+                                                    ? 1
+                                                    : null,
+                                                overflow: widget.onlyCurrentUser
+                                                    ? TextOverflow.ellipsis
+                                                    : null,
                                               ),
                                             ),
                                             const SizedBox(width: 8),
@@ -375,22 +391,45 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                         const SizedBox(height: 3),
                                         Text(
                                           report['reference'] as String,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
+                                          maxLines:
+                                              widget.onlyCurrentUser ? 1 : null,
+                                          overflow: widget.onlyCurrentUser
+                                              ? TextOverflow.ellipsis
+                                              : null,
                                           style: Theme.of(context)
                                               .textTheme
                                               .bodySmall,
                                         ),
                                         const SizedBox(height: 4),
-                                        Text(
-                                          '${report['condition']}  ·  ${_formatReportDateTime(report)}${isThirdParty ? '  ·  Para $subject' : ''}',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(color: statusColor),
-                                        ),
+                                        if (widget.onlyCurrentUser)
+                                          Text(
+                                            '${report['condition']}  ·  ${_formatReportDateTime(report)}${isThirdParty ? '  ·  Para $subject' : ''}',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall
+                                                ?.copyWith(color: statusColor),
+                                          )
+                                        else ...[
+                                          Text(
+                                            (report['conditionText'] ??
+                                                    report['condition'])
+                                                .toString(),
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall
+                                                ?.copyWith(color: statusColor),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            '${_formatReportDateTime(report)}${isThirdParty ? '  ·  Para $subject' : ''}',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall
+                                                ?.copyWith(color: statusColor),
+                                          ),
+                                        ],
                                       ],
                                     ),
                                   ),
