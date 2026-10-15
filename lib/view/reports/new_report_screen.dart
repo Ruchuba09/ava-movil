@@ -259,6 +259,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
                 const SizedBox(height: 14),
                 SelectionField<String>(
                   label: 'CONDICIÓN DEL EVENTO (PARE)',
+                  wrapOptionLabels: true,
                   hint: 'Seleccione la condición identificada',
                   value: _selectedCondition,
                   options: DemoData.conditions
