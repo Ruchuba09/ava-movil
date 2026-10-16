@@ -50,7 +50,7 @@ class DemoData extends ChangeNotifier {
     {
       'id': 1,
       'name': 'Carlos Gómez',
-      'email': 'carlos.gomez@empresa.cl',
+      'email': 'jfcua@ejemplo.cl',
       'role': 'JEFE DE CUADRILLA',
       'project': projects[0],
     },
@@ -63,9 +63,16 @@ class DemoData extends ChangeNotifier {
     },
     {
       'id': 3,
-      'name': 'admin@empresa.cl',
-      'email': 'admin@empresa.cl',
+      'name': 'Administrador',
+      'email': 'admin@ejemplo.cl',
       'role': 'ADMINISTRADOR',
+      'project': 'Todos los proyectos',
+    },
+    {
+      'id': 4,
+      'name': 'Analista',
+      'email': 'analista@ejemplo.cl',
+      'role': 'ANALISTA',
       'project': 'Todos los proyectos',
     },
   ];
@@ -74,7 +81,7 @@ class DemoData extends ChangeNotifier {
     {
       'id': 11,
       'name': 'Juan Pérez',
-      'email': 'juan.perez@empresa.cl',
+      'email': 'trabajador@ejemplo.cl',
       'role': 'Operador',
       'leaderId': 1
     },
@@ -134,6 +141,18 @@ class DemoData extends ChangeNotifier {
   int _nextNotificationId = 3;
   int _nextEmergencyAlertId = 1;
   final List<Map<String, dynamic>> emergencyAlerts = [];
+  final Map<String, int> _demoAccountUserIds = {
+    'admin@ejemplo.cl': 3,
+    'analista@ejemplo.cl': 4,
+    'jfcua@ejemplo.cl': 1,
+    'trabajador@ejemplo.cl': 11,
+  };
+  final Map<String, String> _demoAccountPasswords = {
+    'admin@ejemplo.cl': '1234',
+    'analista@ejemplo.cl': '1234',
+    'jfcua@ejemplo.cl': '1234',
+    'trabajador@ejemplo.cl': '1234',
+  };
 
   Map<String, dynamic> currentUser = {
     'id': 1,
@@ -162,12 +181,20 @@ class DemoData extends ChangeNotifier {
         .toList();
   }
 
+  bool get isWorker => currentUser['leaderId'] is int;
+
   int get currentUserLeaderId =>
       (currentUser['leaderId'] ?? currentUser['id']) as int;
 
-  List<Map<String, dynamic>> get currentUserTeamReports => reports
-      .where((report) => report['managerId'] == currentUserLeaderId)
-      .toList();
+  List<Map<String, dynamic>> get currentUserTeamReports =>
+      isWorker ? currentUserReports : List<Map<String, dynamic>>.from(reports);
+
+  bool get canTriggerEmergencyAlert {
+    final role = currentUser['role'] as String;
+    return currentUser['leaderId'] is int ||
+        role.startsWith('JEFE') ||
+        role.startsWith('JEFA');
+  }
 
   List<Map<String, dynamic>> openReportsFirst(
           Iterable<Map<String, dynamic>> source) =>
@@ -183,9 +210,7 @@ class DemoData extends ChangeNotifier {
 
   List<Map<String, dynamic>> workersForProject(String project) {
     final leaderId = leaderIdForProject(project);
-    return workers
-        .where((worker) => worker['leaderId'] == leaderId)
-        .toList();
+    return workers.where((worker) => worker['leaderId'] == leaderId).toList();
   }
 
   bool canCloseReport(Map<String, dynamic> report) {
@@ -203,24 +228,52 @@ class DemoData extends ChangeNotifier {
 
   void signIn(String email) {
     final normalizedEmail = email.trim().toLowerCase();
-    final user = _users.where((user) => user['email'] == normalizedEmail);
-    if (user.isNotEmpty) {
-      currentUser = Map<String, dynamic>.from(user.first);
-    } else {
-      final worker =
-          workers.where((worker) => worker['email'] == normalizedEmail);
-      if (worker.isNotEmpty) {
-        final leaderId = worker.first['leaderId'] as int;
-        currentUser = {
-          ...worker.first,
-          'project':
-              _users.firstWhere((user) => user['id'] == leaderId)['project'],
-        };
-      } else {
-        currentUser = Map<String, dynamic>.from(_users.first);
-      }
+    final legacyEmails = {
+      'carlos.gomez@empresa.cl': 1,
+      'juan.perez@empresa.cl': 11,
+      'admin@empresa.cl': 3,
+    };
+    final matchingUser =
+        _users.where((user) => user['email'] == normalizedEmail);
+    final matchingWorker =
+        workers.where((worker) => worker['email'] == normalizedEmail);
+    final userId = legacyEmails[normalizedEmail] ??
+        (matchingUser.isNotEmpty
+            ? matchingUser.first['id'] as int
+            : matchingWorker.isNotEmpty
+                ? matchingWorker.first['id'] as int
+                : null);
+    if (userId == null) {
+      throw ArgumentError.value(email, 'email', 'Usuario desconocido.');
     }
+    _setCurrentUserById(userId);
     notifyListeners();
+  }
+
+  bool authenticate(String email, String password) {
+    final normalizedEmail = email.trim().toLowerCase();
+    if (_demoAccountPasswords[normalizedEmail] != password) return false;
+    final userId = _demoAccountUserIds[normalizedEmail];
+    if (userId == null) {
+      throw StateError('La cuenta de demostración no tiene usuario asociado.');
+    }
+    _setCurrentUserById(userId);
+    notifyListeners();
+    return true;
+  }
+
+  void _setCurrentUserById(int userId) {
+    final matchingUser = _users.where((user) => user['id'] == userId);
+    if (matchingUser.isNotEmpty) {
+      currentUser = Map<String, dynamic>.from(matchingUser.first);
+      return;
+    }
+    final worker = workers.firstWhere((item) => item['id'] == userId);
+    final leaderId = worker['leaderId'] as int;
+    currentUser = {
+      ...worker,
+      'project': _users.firstWhere((user) => user['id'] == leaderId)['project'],
+    };
   }
 
   void addReport({
@@ -244,8 +297,8 @@ class DemoData extends ChangeNotifier {
     final reporter = currentUser;
     final managerId = subjectWorker?['leaderId'] as int? ??
         (workers.any((worker) => worker['id'] == reporter['id'])
-            ? workers.firstWhere((worker) => worker['id'] == reporter['id'])[
-                'leaderId'] as int
+            ? workers.firstWhere(
+                (worker) => worker['id'] == reporter['id'])['leaderId'] as int
             : leaderIdForProject(project));
     final manager = _users.firstWhere((user) => user['id'] == managerId);
     final responsibleId = managerId;
@@ -505,14 +558,14 @@ class DemoData extends ChangeNotifier {
           ? 'Carlos Gómez'
           : workers.firstWhere((worker) => worker['id'] == reporterId)['name']
               as String;
-      final subjectId = index == 0 || index == 2
-          ? 1
-          : (index == 1 ? 21 : reporterId);
+      final subjectId =
+          index == 0 || index == 2 ? 1 : (index == 1 ? 21 : reporterId);
       final subject = subjectId == 1
           ? 'Carlos Gómez'
           : workers.firstWhere((worker) => worker['id'] == subjectId)['name']
               as String;
-      final createdById = index == 2 ? reporterId : (index < 2 ? 1 : reporterId);
+      final createdById =
+          index == 2 ? reporterId : (index < 2 ? 1 : reporterId);
       final manager = managerId == 1 ? 'Carlos Gómez' : 'Patricia Rojas';
       reports.add({
         'id': '#${200 - index}',

@@ -2,6 +2,46 @@ import 'package:avamovil/dev/demo_data.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('demo login authenticates the four configured accounts', () {
+    final data = DemoData.instance;
+    final accounts = <String, String>{
+      'admin@ejemplo.cl': 'ADMINISTRADOR',
+      'analista@ejemplo.cl': 'ANALISTA',
+      'jfcua@ejemplo.cl': 'JEFE DE CUADRILLA',
+      'trabajador@ejemplo.cl': 'Operador',
+    };
+
+    for (final account in accounts.entries) {
+      expect(data.authenticate(account.key, '1234'), isTrue);
+      expect(data.currentUser['role'], account.value);
+    }
+    expect(data.authenticate('admin@ejemplo.cl', '1234'), isTrue);
+    expect(data.currentUserTeamReports.length, data.reports.length);
+    expect(data.canTriggerEmergencyAlert, isFalse);
+    expect(data.authenticate('analista@ejemplo.cl', '1234'), isTrue);
+    expect(data.currentUserTeamReports.length, data.reports.length);
+    expect(data.canTriggerEmergencyAlert, isFalse);
+    expect(data.authenticate('jfcua@ejemplo.cl', '1234'), isTrue);
+    expect(data.currentUserTeamReports.length, data.reports.length);
+    expect(data.canTriggerEmergencyAlert, isTrue);
+    expect(data.authenticate('trabajador@ejemplo.cl', '1234'), isTrue);
+    expect(data.isWorker, isTrue);
+    expect(data.currentUserTeamReports, data.currentUserReports);
+    expect(data.currentUserReports, isNotEmpty);
+    expect(
+      data.currentUserReports.every((report) =>
+          report['createdById'] == data.currentUser['id'] ||
+          report['subjectId'] == data.currentUser['id']),
+      isTrue,
+    );
+    expect(data.canTriggerEmergencyAlert, isTrue);
+
+    final currentUserId = data.currentUser['id'];
+    expect(data.authenticate('admin@ejemplo.cl', 'incorrecta'), isFalse);
+    expect(data.currentUser['id'], currentUserId);
+    expect(data.authenticate('desconocido@ejemplo.cl', '1234'), isFalse);
+  });
+
   test(
       'third-party reports route to the subject manager and require close data',
       () {
@@ -106,32 +146,26 @@ void main() {
     );
   });
 
-  test('team reports are assigned to the signed-in user team', () {
+  test('management sees all reports while workers only see their own', () {
     final data = DemoData.instance;
-    data.signIn('carlos.gomez@empresa.cl');
+    for (final email in [
+      'admin@ejemplo.cl',
+      'analista@ejemplo.cl',
+      'jfcua@ejemplo.cl',
+    ]) {
+      expect(data.authenticate(email, '1234'), isTrue);
+      expect(data.currentUserTeamReports, data.reports);
+    }
 
-    expect(data.currentUserTeamReports, isNotEmpty);
-    expect(
-      data.currentUserTeamReports.every((report) => report['managerId'] == 1),
-      isTrue,
-    );
-    expect(
-      data.currentUserTeamReports.any((report) => report['managerId'] == 2),
-      isFalse,
-    );
-
-    data.signIn('andres.silva@empresa.cl');
-    expect(data.currentUserLeaderId, 2);
-    expect(
-      data.currentUserTeamReports.every((report) => report['managerId'] == 2),
-      isTrue,
-    );
+    expect(data.authenticate('trabajador@ejemplo.cl', '1234'), isTrue);
+    expect(data.currentUserTeamReports, data.currentUserReports);
+    expect(data.currentUserReports.length, lessThan(data.reports.length));
   });
 
   test('emergency alert records its recipient and notification audit trail',
       () {
     final data = DemoData.instance;
-    data.signIn('juan.perez@empresa.cl');
+    data.authenticate('trabajador@ejemplo.cl', '1234');
 
     final alert = data.triggerEmergencyAlert();
     expect(alert['sender'], 'Juan Pérez');
@@ -144,17 +178,18 @@ void main() {
     );
     expect(notification['recipientId'], 1);
     expect(notification['read'], isFalse);
+    expect(notification['emergencyAlertId'], alert['id']);
 
-    data.signIn('carlos.gomez@empresa.cl');
+    data.authenticate('jfcua@ejemplo.cl', '1234');
     expect(data.currentUserNotifications, contains(notification));
     data.markNotificationRead(notification);
     expect(notification['read'], isTrue);
     expect(alert['activityLog'], hasLength(3));
     expect(alert['activityLog'].last['type'], 'notification_viewed');
 
-    data.signIn('carlos.gomez@empresa.cl');
+    data.authenticate('jfcua@ejemplo.cl', '1234');
     final supervisorAlert = data.triggerEmergencyAlert();
-    expect(supervisorAlert['recipient'], 'admin@empresa.cl');
+    expect(supervisorAlert['recipient'], 'Administrador');
     expect(supervisorAlert['recipientId'], 3);
 
     data.signIn('admin@empresa.cl');

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/home/home_screen.dart';
@@ -14,23 +13,30 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _obscurePassword = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _emailController.text = DemoData.instance.currentUser['email'] as String;
-  }
 
   @override
   void dispose() {
     _emailController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
   void _login() {
     if (_formKey.currentState!.validate()) {
-      DemoData.instance.signIn(_emailController.text);
+      final authenticated = DemoData.instance.authenticate(
+        _emailController.text,
+        _passwordController.text,
+      );
+      if (!authenticated) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Correo o contraseña incorrectos.'),
+          ),
+        );
+        return;
+      }
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const HomeScreen()),
@@ -50,9 +56,11 @@ class _LoginScreenState extends State<LoginScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SvgPicture.asset(
-                isDark ? 'assets/logos/blanco.svg' : 'assets/logos/verde.svg',
-                height: 80,
+              Image.asset(
+                'assets/logos/negro.png',
+                color: isDark ? verde5Color : Colors.black,
+                colorBlendMode: BlendMode.srcIn,
+                height: 88,
                 fit: BoxFit.contain,
               ),
               const SizedBox(height: 48),
@@ -68,6 +76,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   children: [
                     TextFormField(
                       controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      autocorrect: false,
+                      textInputAction: TextInputAction.next,
                       decoration: InputDecoration(
                         labelText: 'Correo Electrónico',
                         prefixIcon: const Icon(Icons.email),
@@ -81,7 +92,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
+                      controller: _passwordController,
                       obscureText: _obscurePassword,
+                      textInputAction: TextInputAction.done,
                       decoration: InputDecoration(
                         labelText: 'Contraseña',
                         prefixIcon: const Icon(Icons.lock),
@@ -99,6 +112,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       validator: (value) =>
                           value!.isEmpty ? 'Ingrese su contraseña' : null,
+                      onFieldSubmitted: (_) => _login(),
                     ),
                     const SizedBox(height: 32),
                     ElevatedButton(

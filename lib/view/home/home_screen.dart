@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:google_nav_bar/google_nav_bar.dart';
 import 'package:avamovil/dev/demo_data.dart';
@@ -46,20 +45,42 @@ class _HomeScreenState extends State<HomeScreen> {
                   itemCount: notifications.length,
                   itemBuilder: (context, index) {
                     final notification = notifications[index];
+                    final isEmergency =
+                        notification['emergencyAlertId'] != null;
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
+                      tileColor: isEmergency
+                          ? Colors.red.withValues(alpha: 0.08)
+                          : null,
+                      shape: isEmergency
+                          ? RoundedRectangleBorder(
+                              side: BorderSide(
+                                color: Colors.red.withValues(alpha: 0.35),
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                            )
+                          : null,
                       leading: Icon(
-                        notification['emergencyAlertId'] != null
+                        isEmergency
                             ? Icons.sos
                             : notification['read'] == true
                                 ? Icons.notifications_none
                                 : Icons.notifications_active,
-                        color: notification['emergencyAlertId'] != null
-                            ? Colors.red
-                            : verde6Color,
+                        color: isEmergency ? Colors.red : verde6Color,
                       ),
-                      title: Text(notification['title'] as String),
+                      title: Text(
+                        notification['title'] as String,
+                        style: TextStyle(
+                          color: isEmergency ? Colors.red.shade800 : null,
+                          fontWeight:
+                              isEmergency ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
                       subtitle: Text(notification['message'] as String),
+                      trailing: isEmergency
+                          ? Icon(Icons.warning_amber_rounded,
+                              color: Colors.red.shade700)
+                          : null,
                       onTap: () {
                         demoData.markNotificationRead(notification);
                         final emergencyAlertId =
@@ -179,33 +200,52 @@ class _HomeScreenState extends State<HomeScreen> {
     final demoData = DemoData.instance;
     final currentUser = demoData.currentUser;
     final workers = demoData.currentUserWorkers;
+    final isWorker = demoData.isWorker;
+    final reportListTitle = isWorker ? 'Mis Reportes' : 'Todos los reportes';
+    final pages = isWorker
+        ? const <Widget>[
+            NewReportScreen(),
+            ReportsScreen(onlyCurrentUser: true),
+          ]
+        : _widgetOptions;
+    final tabs = isWorker
+        ? const [
+            GButton(icon: Icons.add_box, text: 'Crear Tarjeta'),
+            GButton(icon: Icons.person_outline, text: 'Mis Reportes'),
+          ]
+        : const [
+            GButton(icon: Icons.add_box, text: 'Crear Tarjeta'),
+            GButton(icon: Icons.list_alt, text: 'Todos los reportes'),
+            GButton(icon: Icons.person_outline, text: 'Mis Reportes'),
+          ];
 
     return Scaffold(
       appBar: AppBar(
-        leadingWidth: 56,
-        leading: Builder(
-          builder: (context) => Row(
-            children: [
-              IconButton(
-                tooltip: 'Abrir menú',
-                onPressed: () => Scaffold.of(context).openDrawer(),
-                icon: const Icon(Icons.menu),
+        leadingWidth: isWorker ? 0 : 56,
+        leading: isWorker
+            ? null
+            : Builder(
+                builder: (context) => IconButton(
+                  tooltip: 'Abrir menú',
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                  icon: const Icon(Icons.menu),
+                ),
               ),
-            ],
-          ),
-        ),
         titleSpacing: 0,
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SvgPicture.asset(
-              isDark ? 'assets/logos/verde.svg' : 'assets/logos/negro.svg',
-              width: 72,
+            Image.asset(
+              'assets/logos/negro.png',
+              color: isDark ? verde5Color : Colors.black,
+              colorBlendMode: BlendMode.srcIn,
+              width: 80,
               height: 30,
               fit: BoxFit.contain,
             ),
             const SizedBox(width: 10),
-            _EmergencyHoldButton(onTriggered: _triggerEmergencyAlert),
+            if (demoData.canTriggerEmergencyAlert)
+              _EmergencyHoldButton(onTriggered: _triggerEmergencyAlert),
           ],
         ),
         actions: [
@@ -215,28 +255,30 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                IconButton(
-                  tooltip: 'Escanear QR de Tarjeta PARE',
-                  icon: const Icon(Icons.qr_code_scanner),
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (context) => const ReportQrScannerScreen(),
+                if (!isWorker)
+                  IconButton(
+                    tooltip: 'Escanear QR de Tarjeta PARE',
+                    icon: const Icon(Icons.qr_code_scanner),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (context) => const ReportQrScannerScreen(),
+                      ),
                     ),
                   ),
-                ),
-                AnimatedBuilder(
-                  animation: demoData,
-                  builder: (context, child) => IconButton(
-                    tooltip: 'Notificaciones',
-                    icon: Badge(
-                      isLabelVisible: demoData.unreadNotificationCount > 0,
-                      label: Text('${demoData.unreadNotificationCount}'),
-                      child: const Icon(Icons.notifications),
+                if (!isWorker)
+                  AnimatedBuilder(
+                    animation: demoData,
+                    builder: (context, child) => IconButton(
+                      tooltip: 'Notificaciones',
+                      icon: Badge(
+                        isLabelVisible: demoData.unreadNotificationCount > 0,
+                        label: Text('${demoData.unreadNotificationCount}'),
+                        child: const Icon(Icons.notifications),
+                      ),
+                      onPressed: _showNotifications,
                     ),
-                    onPressed: _showNotifications,
                   ),
-                ),
                 PopupMenuButton<String>(
                   tooltip: 'Sesión de ${currentUser['name']}',
                   onSelected: (value) {
@@ -285,155 +327,163 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      drawer: Drawer(
-        child: Column(
-          children: [
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.zero,
+      drawer: isWorker
+          ? null
+          : Drawer(
+              child: Column(
                 children: [
-                  DrawerHeader(
-                    decoration: BoxDecoration(
-                      color: isDark ? gris2Color : verde5Color,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Expanded(
+                    child: ListView(
+                      padding: EdgeInsets.zero,
                       children: [
-                        SvgPicture.asset(
-                          isDark
-                              ? 'assets/logos/verde.svg'
-                              : 'assets/logos/negro.svg',
-                          width: 72,
-                          height: 30,
-                          fit: BoxFit.contain,
+                        DrawerHeader(
+                          decoration: BoxDecoration(
+                            color: isDark ? gris2Color : verde5Color,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Image.asset(
+                                'assets/logos/negro.png',
+                                color: isDark ? verde5Color : Colors.black,
+                                colorBlendMode: BlendMode.srcIn,
+                                width: 80,
+                                height: 30,
+                                fit: BoxFit.contain,
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    currentUser['name'] as String,
+                                    style: TextStyle(
+                                      color:
+                                          isDark ? Colors.white : Colors.black,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
+                                    ),
+                                  ),
+                                  Text(
+                                    currentUser['email'] as String,
+                                    style: TextStyle(
+                                      color: isDark
+                                          ? Colors.white70
+                                          : Colors.black54,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  Text(currentUser['role'] as String,
+                                      style: TextStyle(
+                                          color: isDark
+                                              ? Colors.white70
+                                              : Colors.black54,
+                                          fontSize: 12)),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        ListTile(
+                          leading: const Icon(Icons.list_alt),
+                          title: Text(reportListTitle),
+                          selected: !_showPermissions && _selectedIndex == 1,
+                          onTap: () {
+                            Navigator.pop(context);
+                            setState(() {
+                              _selectedIndex = 1;
+                              _showPermissions = false;
+                            });
+                          },
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.person_outline),
+                          title: const Text('Mis Reportes'),
+                          selected: !_showPermissions && _selectedIndex == 2,
+                          onTap: () {
+                            Navigator.pop(context);
+                            setState(() {
+                              _selectedIndex = 2;
+                              _showPermissions = false;
+                            });
+                          },
+                        ),
+                        ExpansionTile(
+                          leading: const Icon(Icons.people_outline),
+                          title: Text(
+                              'Visualización y equipo (${workers.length})'),
                           children: [
-                            Text(
-                              currentUser['name'] as String,
-                              style: TextStyle(
-                                color: isDark ? Colors.white : Colors.black,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
-                              ),
+                            ListTile(
+                              contentPadding:
+                                  const EdgeInsets.only(left: 56, right: 16),
+                              leading: const Icon(Icons.visibility_outlined),
+                              title: const Text('Visualización de cuadrilla'),
+                              onTap: () {
+                                Navigator.pop(context);
+                                setState(() => _showPermissions = true);
+                              },
                             ),
-                            Text(
-                              currentUser['email'] as String,
-                              style: TextStyle(
-                                color: isDark ? Colors.white70 : Colors.black54,
-                                fontSize: 14,
-                              ),
-                            ),
-                            Text(currentUser['role'] as String,
-                                style: TextStyle(
-                                    color: isDark
-                                        ? Colors.white70
-                                        : Colors.black54,
-                                    fontSize: 12)),
+                            ...workers.map((worker) => ListTile(
+                                  dense: true,
+                                  contentPadding: const EdgeInsets.only(
+                                      left: 56, right: 16),
+                                  leading: const Icon(Icons.person_outline,
+                                      size: 18),
+                                  title: Text(worker['name'] as String),
+                                  subtitle: Text(worker['role'] as String),
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            WorkerProfileScreen(worker: worker),
+                                      ),
+                                    );
+                                  },
+                                )),
                           ],
                         ),
                       ],
                     ),
                   ),
-                  ListTile(
-                    leading: const Icon(Icons.list_alt),
-                    title: const Text('Reportes de la cuadrilla'),
-                    selected: !_showPermissions && _selectedIndex == 1,
-                    onTap: () {
-                      Navigator.pop(context);
-                      setState(() {
-                        _selectedIndex = 1;
-                        _showPermissions = false;
-                      });
-                    },
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.person_outline),
-                    title: const Text('Mis Reportes'),
-                    selected: !_showPermissions && _selectedIndex == 2,
-                    onTap: () {
-                      Navigator.pop(context);
-                      setState(() {
-                        _selectedIndex = 2;
-                        _showPermissions = false;
-                      });
-                    },
-                  ),
-                  ExpansionTile(
-                    leading: const Icon(Icons.people_outline),
-                    title: Text('Visualización y equipo (${workers.length})'),
-                    children: [
-                      ListTile(
-                        contentPadding:
-                            const EdgeInsets.only(left: 56, right: 16),
-                        leading: const Icon(Icons.visibility_outlined),
-                        title: const Text('Visualización de cuadrilla'),
-                        onTap: () {
-                          Navigator.pop(context);
-                          setState(() => _showPermissions = true);
-                        },
-                      ),
-                      ...workers.map((worker) => ListTile(
-                            dense: true,
-                            contentPadding:
-                                const EdgeInsets.only(left: 56, right: 16),
-                            leading: const Icon(Icons.person_outline, size: 18),
-                            title: Text(worker['name'] as String),
-                            subtitle: Text(worker['role'] as String),
-                            onTap: () {
-                              Navigator.pop(context);
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      WorkerProfileScreen(worker: worker),
-                                ),
-                              );
-                            },
-                          )),
-                    ],
+                  const Divider(height: 1),
+                  SafeArea(
+                    top: false,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Consumer<ThemeController>(
+                          builder: (context, themeController, child) {
+                            final darkMode = themeController.themeMode ==
+                                    ThemeMode.dark ||
+                                (themeController.themeMode ==
+                                        ThemeMode.system &&
+                                    MediaQuery.of(context).platformBrightness ==
+                                        Brightness.dark);
+                            return SwitchListTile(
+                              title: const Text('Modo Oscuro'),
+                              secondary: const Icon(Icons.dark_mode),
+                              value: darkMode,
+                              activeThumbColor: verde6Color,
+                              onChanged: themeController.toggleTheme,
+                            );
+                          },
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.logout),
+                          title: const Text('Cerrar sesión'),
+                          onTap: _signOut,
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
-            const Divider(height: 1),
-            SafeArea(
-              top: false,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Consumer<ThemeController>(
-                    builder: (context, themeController, child) {
-                      final darkMode =
-                          themeController.themeMode == ThemeMode.dark ||
-                              (themeController.themeMode == ThemeMode.system &&
-                                  MediaQuery.of(context).platformBrightness ==
-                                      Brightness.dark);
-                      return SwitchListTile(
-                        title: const Text('Modo Oscuro'),
-                        secondary: const Icon(Icons.dark_mode),
-                        value: darkMode,
-                        activeThumbColor: verde6Color,
-                        onChanged: themeController.toggleTheme,
-                      );
-                    },
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.logout),
-                    title: const Text('Cerrar sesión'),
-                    onTap: _signOut,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-      body: _showPermissions
+      body: _showPermissions && !isWorker
           ? const PermissionsScreen()
-          : _widgetOptions.elementAt(_selectedIndex),
+          : pages.elementAt(_selectedIndex),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Theme.of(context).scaffoldBackgroundColor,
@@ -457,20 +507,7 @@ class _HomeScreenState extends State<HomeScreen> {
               duration: const Duration(milliseconds: 400),
               tabBackgroundColor: verde5Color,
               color: isDark ? Colors.white : Colors.black,
-              tabs: const [
-                GButton(
-                  icon: Icons.add_box,
-                  text: 'Crear Tarjeta',
-                ),
-                GButton(
-                  icon: Icons.list_alt,
-                  text: 'Reportes cuadrilla',
-                ),
-                GButton(
-                  icon: Icons.person_outline,
-                  text: 'Mis Reportes',
-                ),
-              ],
+              tabs: tabs,
               selectedIndex: _selectedIndex,
               onTabChange: (index) {
                 setState(() {
