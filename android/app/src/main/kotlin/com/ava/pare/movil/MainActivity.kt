@@ -1,4 +1,4 @@
-package com.example.movil_base
+package com.ava.pare.movil
 
 import io.flutter.embedding.android.FlutterActivity
 
