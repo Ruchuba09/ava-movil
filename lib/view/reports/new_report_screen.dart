@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
+import 'package:avamovil/view/reports/camera_access.dart';
 import 'package:avamovil/view/reports/report_qr_screen.dart';
 import 'package:avamovil/view/widgets/selection_field.dart';
 import 'package:image_picker/image_picker.dart';
@@ -64,6 +65,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
     try {
       final picked = <XFile>[];
       if (source == 'camera') {
+        if (!await ensureCameraPermission(context) || !mounted) return;
         final image = await ImagePicker().pickImage(source: ImageSource.camera);
         if (image != null) picked.add(image);
       } else if (source == 'gallery') {

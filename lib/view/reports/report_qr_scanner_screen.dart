@@ -167,54 +167,49 @@ class _ReportQrScannerScreenState extends State<ReportQrScannerScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Escanear QR de Tarjeta PARE')),
-        body: ValueListenableBuilder<MobileScannerState>(
-          valueListenable: _controller,
-          builder: (context, scannerState, _) => Stack(
+        body: MobileScanner(
+          controller: _controller,
+          onDetect: _handleDetection,
+          errorBuilder: (context, error) => _buildCameraError(
+            context,
+            _cameraRetryError ?? _cameraErrorMessage(error),
+          ),
+          placeholderBuilder: (context) => const ColoredBox(
+            color: Colors.black,
+            child: Center(
+              child: CircularProgressIndicator(color: Colors.white),
+            ),
+          ),
+          overlayBuilder: (context, constraints) => Stack(
             fit: StackFit.expand,
             children: [
-              MobileScanner(
-                controller: _controller,
-                onDetect: _handleDetection,
-                errorBuilder: (context, error) => _buildCameraError(
-                  context,
-                  _cameraRetryError ?? _cameraErrorMessage(error),
-                ),
-                placeholderBuilder: (context) => const ColoredBox(
-                  color: Colors.black,
-                  child: Center(
-                    child: CircularProgressIndicator(color: Colors.white),
+              Center(
+                child: Container(
+                  width: 260,
+                  height: 260,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.white, width: 3),
+                    borderRadius: BorderRadius.circular(20),
                   ),
                 ),
               ),
-              if (scannerState.error == null)
-                Center(
-                  child: Container(
-                    width: 260,
-                    height: 260,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white, width: 3),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
+              Positioned(
+                left: 24,
+                right: 24,
+                bottom: 40,
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'Centra el código QR dentro del recuadro.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white),
                   ),
                 ),
-              if (scannerState.error == null)
-                Positioned(
-                  left: 24,
-                  right: 24,
-                  bottom: 40,
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.7),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      'Centra el código QR dentro del recuadro.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                ),
+              ),
             ],
           ),
         ),
