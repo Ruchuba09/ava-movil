@@ -106,6 +106,28 @@ void main() {
     );
   });
 
+  test('team reports are assigned to the signed-in user team', () {
+    final data = DemoData.instance;
+    data.signIn('carlos.gomez@empresa.cl');
+
+    expect(data.currentUserTeamReports, isNotEmpty);
+    expect(
+      data.currentUserTeamReports.every((report) => report['managerId'] == 1),
+      isTrue,
+    );
+    expect(
+      data.currentUserTeamReports.any((report) => report['managerId'] == 2),
+      isFalse,
+    );
+
+    data.signIn('andres.silva@empresa.cl');
+    expect(data.currentUserLeaderId, 2);
+    expect(
+      data.currentUserTeamReports.every((report) => report['managerId'] == 2),
+      isTrue,
+    );
+  });
+
   test('unfiltered worker report lists keep open reports first', () {
     final data = DemoData.instance;
     final sorted = data.openReportsFirst([

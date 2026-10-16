@@ -25,7 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   static const List<Widget> _widgetOptions = <Widget>[
     NewReportScreen(),
-    ReportsScreen(),
+    ReportsScreen(onlyCurrentTeam: true),
     ReportsScreen(onlyCurrentUser: true),
   ];
 
@@ -253,7 +253,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   ListTile(
                     leading: const Icon(Icons.list_alt),
-                    title: const Text('Listado Tarjeta PARE'),
+                    title: const Text('Reportes de la cuadrilla'),
+                    selected: !_showPermissions && _selectedIndex == 1,
                     onTap: () {
                       Navigator.pop(context);
                       setState(() {
@@ -378,7 +379,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 GButton(
                   icon: Icons.list_alt,
-                  text: 'Listado PARE',
+                  text: 'Reportes cuadrilla',
                 ),
                 GButton(
                   icon: Icons.person_outline,

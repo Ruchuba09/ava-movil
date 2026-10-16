@@ -160,6 +160,13 @@ class DemoData extends ChangeNotifier {
         .toList();
   }
 
+  int get currentUserLeaderId =>
+      (currentUser['leaderId'] ?? currentUser['id']) as int;
+
+  List<Map<String, dynamic>> get currentUserTeamReports => reports
+      .where((report) => report['managerId'] == currentUserLeaderId)
+      .toList();
+
   List<Map<String, dynamic>> openReportsFirst(
           Iterable<Map<String, dynamic>> source) =>
       [

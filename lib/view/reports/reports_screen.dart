@@ -8,12 +8,14 @@ class ReportsScreen extends StatefulWidget {
   final String initialStatusFilter;
   final String initialProjectFilter;
   final bool onlyCurrentUser;
+  final bool onlyCurrentTeam;
 
   const ReportsScreen({
     super.key,
     this.initialStatusFilter = 'Todos',
     this.initialProjectFilter = 'Todos los proyectos',
     this.onlyCurrentUser = false,
+    this.onlyCurrentTeam = false,
   });
 
   @override
@@ -72,7 +74,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
       builder: (context, child) {
         final sourceReports = widget.onlyCurrentUser
             ? demoData.currentUserReports
-            : demoData.reports;
+            : widget.onlyCurrentTeam
+                ? demoData.currentUserTeamReports
+                : demoData.reports;
         final matchingReports = sourceReports.where((report) {
           final date = report['date'] as DateTime;
           final passProject = _projectFilter == 'Todos los proyectos' ||
@@ -111,14 +115,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   Text(
                       widget.onlyCurrentUser
                           ? 'Mis Reportes'
-                          : 'Listado Tarjeta PARE',
+                          : widget.onlyCurrentTeam
+                              ? 'Reportes de la cuadrilla'
+                              : 'Listado Tarjeta PARE',
                       style:
                           TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
                   Text(
                       widget.onlyCurrentUser
                           ? 'Tarjetas creadas por ti o asociadas a tu usuario.'
-                          : 'Listado de reportes registrados.',
+                          : widget.onlyCurrentTeam
+                              ? 'Reportes asignados a tu cuadrilla para revisar y cerrar.'
+                              : 'Listado de reportes registrados.',
                       style: TextStyle(
                           color: isDark ? Colors.grey[400] : Colors.grey[700])),
                   const SizedBox(height: 6),
