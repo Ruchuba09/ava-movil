@@ -397,12 +397,18 @@ class DemoData extends ChangeNotifier {
 
   Map<String, dynamic> triggerEmergencyAlert() {
     final senderId = currentUser['id'] as int;
-    final leaderId = currentUser['leaderId'];
-    if (leaderId is! int) {
-      throw StateError('No tienes un encargado de cuadrilla asignado.');
+    final assignedLeaderId = currentUser['leaderId'];
+    final currentRole = currentUser['role'] as String;
+    final recipientId = assignedLeaderId is int
+        ? assignedLeaderId
+        : currentRole.startsWith('JEFE') || currentRole.startsWith('JEFA')
+            ? 3
+            : null;
+    if (recipientId == null) {
+      throw StateError('No hay un encargado asignado para esta cuenta.');
     }
     final leader = _users.firstWhere(
-      (user) => user['id'] == leaderId,
+      (user) => user['id'] == recipientId,
       orElse: () => throw StateError('No se encontró a tu encargado.'),
     );
     final createdAt = DateTime.now();
@@ -413,7 +419,7 @@ class DemoData extends ChangeNotifier {
       'senderId': senderId,
       'sender': currentUser['name'],
       'senderRole': currentUser['role'],
-      'recipientId': leaderId,
+      'recipientId': recipientId,
       'recipient': leader['name'],
       'createdAt': createdAt,
       'status': 'REGISTRADA EN LA APLICACIÓN',
@@ -439,7 +445,7 @@ class DemoData extends ChangeNotifier {
     emergencyAlerts.insert(0, alert);
     notifications.insert(0, {
       'id': notificationId,
-      'recipientId': leaderId,
+      'recipientId': recipientId,
       'emergencyAlertId': alertId,
       'title': 'ALERTA DE EMERGENCIA',
       'message': '${currentUser['name']} solicita ayuda inmediata.',

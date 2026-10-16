@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:google_nav_bar/google_nav_bar.dart';
 import 'package:avamovil/dev/demo_data.dart';
@@ -182,28 +181,31 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SvgPicture.asset(
-              isDark ? 'assets/logos/blanco.svg' : 'assets/logos/verde.svg',
-              height: 32,
-              fit: BoxFit.contain,
-              placeholderBuilder: (context) => Text(
-                'AVA',
-                style: TextStyle(
-                  color: isDark ? verde5Color : gris2Color,
-                  fontWeight: FontWeight.bold,
+        leadingWidth: 112,
+        leading: Builder(
+          builder: (context) => Row(
+            children: [
+              IconButton(
+                tooltip: 'Abrir menú',
+                onPressed: () => Scaffold.of(context).openDrawer(),
+                icon: const Icon(Icons.menu),
+              ),
+              Expanded(
+                child: Text(
+                  'AVA',
+                  style: TextStyle(
+                    color: isDark ? verde5Color : gris2Color,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 22,
+                    letterSpacing: 1,
+                  ),
                 ),
               ),
-            ),
-            if (currentUser['leaderId'] is int) ...[
-              const SizedBox(width: 8),
-              _EmergencyHoldButton(onTriggered: _triggerEmergencyAlert),
             ],
-          ],
+          ),
         ),
         actions: [
+          _EmergencyHoldButton(onTriggered: _triggerEmergencyAlert),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerRight,
@@ -288,51 +290,47 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: EdgeInsets.zero,
                 children: [
                   DrawerHeader(
-                      decoration: const BoxDecoration(
-                        color: verde5Color,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          SvgPicture.asset(
-                            isDark
-                                ? 'assets/logos/blanco.svg'
-                                : 'assets/logos/negro.svg',
-                            height: 36,
-                            fit: BoxFit.contain,
-                            placeholderBuilder: (context) => const Text(
-                              'AVA',
-                              style: TextStyle(
-                                  color: Colors.black,
-                                  fontWeight: FontWeight.bold),
+                    decoration: const BoxDecoration(
+                      color: verde5Color,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'AVA',
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 28,
+                            letterSpacing: 1,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              currentUser['name'] as String,
+                              style: const TextStyle(
+                                color: Colors.black,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
                             ),
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                currentUser['name'] as String,
-                                style: const TextStyle(
-                                  color: Colors.black,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                ),
+                            Text(
+                              currentUser['email'] as String,
+                              style: const TextStyle(
+                                color: Colors.black54,
+                                fontSize: 14,
                               ),
-                              Text(
-                                currentUser['email'] as String,
+                            ),
+                            Text(currentUser['role'] as String,
                                 style: const TextStyle(
-                                  color: Colors.black54,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              Text(currentUser['role'] as String,
-                                  style: const TextStyle(
-                                      color: Colors.black54, fontSize: 12)),
-                            ],
-                          ),
-                        ],
-                      ),
+                                    color: Colors.black54, fontSize: 12)),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                   ListTile(
                     leading: const Icon(Icons.list_alt),
@@ -545,35 +543,54 @@ class _EmergencyHoldButtonState extends State<_EmergencyHoldButton>
             onPointerUp: _cancelHold,
             onPointerCancel: _cancelHold,
             child: SizedBox(
-              width: 48,
+              width: 76,
               height: 48,
               child: AnimatedBuilder(
                 animation: _holdController,
                 builder: (context, child) => Stack(
-                  alignment: Alignment.center,
                   children: [
-                    SizedBox(
-                      width: 46,
-                      height: 46,
-                      child: CircularProgressIndicator(
-                        value: _holdController.value,
-                        strokeWidth: 3,
-                        backgroundColor: Colors.red.withValues(alpha: 0.2),
-                        valueColor:
-                            const AlwaysStoppedAnimation<Color>(Colors.red),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).scaffoldBackgroundColor,
+                        borderRadius: BorderRadius.circular(22),
+                        border: Border.all(
+                          color: const Color(0xFFC62828),
+                          width: 2,
+                        ),
+                      ),
+                      child: const Center(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.sos, color: Color(0xFFC62828), size: 20),
+                            SizedBox(width: 4),
+                            Text(
+                              'SOS',
+                              style: TextStyle(
+                                color: Color(0xFFC62828),
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    Container(
-                      width: 38,
-                      height: 38,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFC62828),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.sos,
-                        color: Colors.white,
-                        size: 25,
+                    Positioned(
+                      left: 8,
+                      right: 8,
+                      bottom: 4,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(2),
+                        child: LinearProgressIndicator(
+                          value: _holdController.value,
+                          minHeight: 3,
+                          backgroundColor:
+                              const Color(0xFFC62828).withValues(alpha: 0.15),
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                              Color(0xFFC62828)),
+                        ),
                       ),
                     ),
                   ],

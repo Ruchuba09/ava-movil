@@ -152,6 +152,12 @@ void main() {
     expect(alert['activityLog'], hasLength(3));
     expect(alert['activityLog'].last['type'], 'notification_viewed');
 
+    data.signIn('carlos.gomez@empresa.cl');
+    final supervisorAlert = data.triggerEmergencyAlert();
+    expect(supervisorAlert['recipient'], 'admin@empresa.cl');
+    expect(supervisorAlert['recipientId'], 3);
+
+    data.signIn('admin@empresa.cl');
     expect(
       () => data.triggerEmergencyAlert(),
       throwsA(isA<StateError>()),
