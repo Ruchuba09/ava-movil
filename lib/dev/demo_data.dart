@@ -132,6 +132,8 @@ class DemoData extends ChangeNotifier {
   final List<Map<String, dynamic>> reports = [];
   final List<Map<String, dynamic>> notifications = [];
   int _nextNotificationId = 3;
+  int _nextEmergencyAlertId = 1;
+  final List<Map<String, dynamic>> emergencyAlerts = [];
 
   Map<String, dynamic> currentUser = {
     'id': 1,
@@ -356,6 +358,24 @@ class DemoData extends ChangeNotifier {
   void markNotificationRead(Map<String, dynamic> notification) {
     if (notification['read'] == true) return;
     notification['read'] = true;
+    final emergencyAlertId = notification['emergencyAlertId'];
+    if (emergencyAlertId != null) {
+      final alerts =
+          emergencyAlerts.where((alert) => alert['id'] == emergencyAlertId);
+      if (alerts.isNotEmpty) {
+        final alert = alerts.first;
+        (alert['activityLog'] as List<Map<String, dynamic>>).add({
+          'type': 'notification_viewed',
+          'description':
+              'Alerta de emergencia visualizada por ${currentUser['name']}',
+          'at': DateTime.now(),
+          'actorId': currentUser['id'],
+          'actor': currentUser['name'],
+        });
+      }
+      notifyListeners();
+      return;
+    }
     final report = reports.where(
       (item) => item['id'] == notification['reportId'],
     );
@@ -373,6 +393,61 @@ class DemoData extends ChangeNotifier {
       report.first['activityLog'] = activityLog;
     }
     notifyListeners();
+  }
+
+  Map<String, dynamic> triggerEmergencyAlert() {
+    final senderId = currentUser['id'] as int;
+    final leaderId = currentUser['leaderId'];
+    if (leaderId is! int) {
+      throw StateError('No tienes un encargado de cuadrilla asignado.');
+    }
+    final leader = _users.firstWhere(
+      (user) => user['id'] == leaderId,
+      orElse: () => throw StateError('No se encontró a tu encargado.'),
+    );
+    final createdAt = DateTime.now();
+    final alertId = 'E-${_nextEmergencyAlertId++}';
+    final notificationId = 'N-${_nextNotificationId++}';
+    final alert = <String, dynamic>{
+      'id': alertId,
+      'senderId': senderId,
+      'sender': currentUser['name'],
+      'senderRole': currentUser['role'],
+      'recipientId': leaderId,
+      'recipient': leader['name'],
+      'createdAt': createdAt,
+      'status': 'REGISTRADA EN LA APLICACIÓN',
+      'activityLog': <Map<String, dynamic>>[
+        {
+          'type': 'triggered',
+          'description':
+              'Alerta de emergencia activada por ${currentUser['name']}',
+          'at': createdAt,
+          'actorId': senderId,
+          'actor': currentUser['name'],
+        },
+        {
+          'type': 'notification_registered',
+          'description':
+              'Notificación registrada para ${leader['name']} en la aplicación',
+          'at': createdAt,
+          'actorId': senderId,
+          'actor': currentUser['name'],
+        },
+      ],
+    };
+    emergencyAlerts.insert(0, alert);
+    notifications.insert(0, {
+      'id': notificationId,
+      'recipientId': leaderId,
+      'emergencyAlertId': alertId,
+      'title': 'ALERTA DE EMERGENCIA',
+      'message': '${currentUser['name']} solicita ayuda inmediata.',
+      'read': false,
+      'createdAt': createdAt,
+    });
+    notifyListeners();
+    return alert;
   }
 
   void deleteReadNotifications() {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:google_nav_bar/google_nav_bar.dart';
@@ -48,14 +49,28 @@ class _HomeScreenState extends State<HomeScreen> {
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: Icon(
-                          notification['read'] == true
-                              ? Icons.notifications_none
-                              : Icons.notifications_active,
-                          color: verde6Color),
+                        notification['emergencyAlertId'] != null
+                            ? Icons.sos
+                            : notification['read'] == true
+                                ? Icons.notifications_none
+                                : Icons.notifications_active,
+                        color: notification['emergencyAlertId'] != null
+                            ? Colors.red
+                            : verde6Color,
+                      ),
                       title: Text(notification['title'] as String),
                       subtitle: Text(notification['message'] as String),
                       onTap: () {
                         demoData.markNotificationRead(notification);
+                        final emergencyAlertId =
+                            notification['emergencyAlertId'];
+                        if (emergencyAlertId != null) {
+                          final alert = demoData.emergencyAlerts.firstWhere(
+                              (item) => item['id'] == emergencyAlertId);
+                          Navigator.pop(dialogContext);
+                          _showEmergencyAlertDetails(alert);
+                          return;
+                        }
                         final report = demoData.reports.firstWhere(
                             (item) => item['id'] == notification['reportId']);
                         Navigator.pop(dialogContext);
@@ -92,6 +107,65 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _showEmergencyAlertDetails(Map<String, dynamic> alert) async {
+    final events = alert['activityLog'] as List<Map<String, dynamic>>;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.sos, color: Colors.red, size: 36),
+        title: const Text('Alerta de emergencia'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Solicitante: ${alert['sender']}'),
+              Text('Encargado: ${alert['recipient']}'),
+              Text('Estado: ${alert['status']}'),
+              const SizedBox(height: 16),
+              const Text('Trazabilidad',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              ...events.map((event) {
+                final at = event['at'] as DateTime;
+                final timestamp =
+                    '${at.day.toString().padLeft(2, '0')}-${at.month.toString().padLeft(2, '0')}-${at.year} ${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}:${at.second.toString().padLeft(2, '0')}';
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text('${event['description']}\n$timestamp'),
+                );
+              }),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _triggerEmergencyAlert() {
+    try {
+      final alert = DemoData.instance.triggerEmergencyAlert();
+      HapticFeedback.heavyImpact();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Alerta registrada para ${alert['recipient']}.'),
+          backgroundColor: Colors.red.shade800,
+        ),
+      );
+    } on StateError catch (error) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    }
+  }
+
   void _signOut() {
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (context) => const LoginScreen()),
@@ -108,17 +182,26 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: SvgPicture.asset(
-          isDark ? 'assets/logos/blanco.svg' : 'assets/logos/verde.svg',
-          height: 32,
-          fit: BoxFit.contain,
-          placeholderBuilder: (context) => Text(
-            'AVA',
-            style: TextStyle(
-              color: isDark ? verde5Color : gris2Color,
-              fontWeight: FontWeight.bold,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SvgPicture.asset(
+              isDark ? 'assets/logos/blanco.svg' : 'assets/logos/verde.svg',
+              height: 32,
+              fit: BoxFit.contain,
+              placeholderBuilder: (context) => Text(
+                'AVA',
+                style: TextStyle(
+                  color: isDark ? verde5Color : gris2Color,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
-          ),
+            if (currentUser['leaderId'] is int) ...[
+              const SizedBox(width: 8),
+              _EmergencyHoldButton(onTriggered: _triggerEmergencyAlert),
+            ],
+          ],
         ),
         actions: [
           FittedBox(
@@ -399,4 +482,105 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+}
+
+class _EmergencyHoldButton extends StatefulWidget {
+  final VoidCallback onTriggered;
+
+  const _EmergencyHoldButton({required this.onTriggered});
+
+  @override
+  State<_EmergencyHoldButton> createState() => _EmergencyHoldButtonState();
+}
+
+class _EmergencyHoldButtonState extends State<_EmergencyHoldButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _holdController;
+  bool _isHolding = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _holdController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    )..addStatusListener(_onHoldStatusChanged);
+  }
+
+  void _onHoldStatusChanged(AnimationStatus status) {
+    if (status != AnimationStatus.completed || !_isHolding) return;
+    _isHolding = false;
+    widget.onTriggered();
+    _holdController.value = 0;
+  }
+
+  void _startHold(PointerDownEvent _) {
+    if (_isHolding) return;
+    _isHolding = true;
+    _holdController.forward(from: 0);
+  }
+
+  void _cancelHold(PointerEvent _) {
+    if (!_isHolding) return;
+    _isHolding = false;
+    _holdController.stop();
+    _holdController.value = 0;
+  }
+
+  @override
+  void dispose() {
+    _holdController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+        message: 'Mantén presionado 3 segundos para avisar a tu encargado',
+        child: Semantics(
+          label:
+              'SOS. Mantén presionado tres segundos para avisar a tu encargado',
+          button: true,
+          child: Listener(
+            onPointerDown: _startHold,
+            onPointerUp: _cancelHold,
+            onPointerCancel: _cancelHold,
+            child: SizedBox(
+              width: 48,
+              height: 48,
+              child: AnimatedBuilder(
+                animation: _holdController,
+                builder: (context, child) => Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox(
+                      width: 46,
+                      height: 46,
+                      child: CircularProgressIndicator(
+                        value: _holdController.value,
+                        strokeWidth: 3,
+                        backgroundColor: Colors.red.withValues(alpha: 0.2),
+                        valueColor:
+                            const AlwaysStoppedAnimation<Color>(Colors.red),
+                      ),
+                    ),
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFC62828),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.sos,
+                        color: Colors.white,
+                        size: 25,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
 }

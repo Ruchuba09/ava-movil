@@ -128,6 +128,36 @@ void main() {
     );
   });
 
+  test('emergency alert records its recipient and notification audit trail',
+      () {
+    final data = DemoData.instance;
+    data.signIn('juan.perez@empresa.cl');
+
+    final alert = data.triggerEmergencyAlert();
+    expect(alert['sender'], 'Juan Pérez');
+    expect(alert['recipient'], 'Carlos Gómez');
+    expect(alert['status'], 'REGISTRADA EN LA APLICACIÓN');
+    expect(alert['activityLog'], hasLength(2));
+
+    final notification = data.notifications.firstWhere(
+      (item) => item['emergencyAlertId'] == alert['id'],
+    );
+    expect(notification['recipientId'], 1);
+    expect(notification['read'], isFalse);
+
+    data.signIn('carlos.gomez@empresa.cl');
+    expect(data.currentUserNotifications, contains(notification));
+    data.markNotificationRead(notification);
+    expect(notification['read'], isTrue);
+    expect(alert['activityLog'], hasLength(3));
+    expect(alert['activityLog'].last['type'], 'notification_viewed');
+
+    expect(
+      () => data.triggerEmergencyAlert(),
+      throwsA(isA<StateError>()),
+    );
+  });
+
   test('unfiltered worker report lists keep open reports first', () {
     final data = DemoData.instance;
     final sorted = data.openReportsFirst([
