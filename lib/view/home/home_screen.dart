@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:google_nav_bar/google_nav_bar.dart';
 import 'package:avamovil/dev/demo_data.dart';
@@ -181,7 +182,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leadingWidth: 112,
+        leadingWidth: 56,
         leading: Builder(
           builder: (context) => Row(
             children: [
@@ -190,22 +191,24 @@ class _HomeScreenState extends State<HomeScreen> {
                 onPressed: () => Scaffold.of(context).openDrawer(),
                 icon: const Icon(Icons.menu),
               ),
-              Expanded(
-                child: Text(
-                  'AVA',
-                  style: TextStyle(
-                    color: isDark ? verde5Color : gris2Color,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 22,
-                    letterSpacing: 1,
-                  ),
-                ),
-              ),
             ],
           ),
         ),
+        titleSpacing: 0,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SvgPicture.asset(
+              isDark ? 'assets/logos/verde.svg' : 'assets/logos/negro.svg',
+              width: 72,
+              height: 30,
+              fit: BoxFit.contain,
+            ),
+            const SizedBox(width: 10),
+            _EmergencyHoldButton(onTriggered: _triggerEmergencyAlert),
+          ],
+        ),
         actions: [
-          _EmergencyHoldButton(onTriggered: _triggerEmergencyAlert),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerRight,
@@ -290,43 +293,45 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: EdgeInsets.zero,
                 children: [
                   DrawerHeader(
-                    decoration: const BoxDecoration(
-                      color: verde5Color,
+                    decoration: BoxDecoration(
+                      color: isDark ? gris2Color : verde5Color,
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'AVA',
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontSize: 28,
-                            letterSpacing: 1,
-                            fontWeight: FontWeight.w800,
-                          ),
+                        SvgPicture.asset(
+                          isDark
+                              ? 'assets/logos/verde.svg'
+                              : 'assets/logos/negro.svg',
+                          width: 72,
+                          height: 30,
+                          fit: BoxFit.contain,
                         ),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               currentUser['name'] as String,
-                              style: const TextStyle(
-                                color: Colors.black,
+                              style: TextStyle(
+                                color: isDark ? Colors.white : Colors.black,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 18,
                               ),
                             ),
                             Text(
                               currentUser['email'] as String,
-                              style: const TextStyle(
-                                color: Colors.black54,
+                              style: TextStyle(
+                                color: isDark ? Colors.white70 : Colors.black54,
                                 fontSize: 14,
                               ),
                             ),
                             Text(currentUser['role'] as String,
-                                style: const TextStyle(
-                                    color: Colors.black54, fontSize: 12)),
+                                style: TextStyle(
+                                    color: isDark
+                                        ? Colors.white70
+                                        : Colors.black54,
+                                    fontSize: 12)),
                           ],
                         ),
                       ],
@@ -374,8 +379,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             dense: true,
                             contentPadding:
                                 const EdgeInsets.only(left: 56, right: 16),
-                            leading:
-                                const Icon(Icons.person_outline, size: 18),
+                            leading: const Icon(Icons.person_outline, size: 18),
                             title: Text(worker['name'] as String),
                             subtitle: Text(worker['role'] as String),
                             onTap: () {
@@ -559,21 +563,14 @@ class _EmergencyHoldButtonState extends State<_EmergencyHoldButton>
                         ),
                       ),
                       child: const Center(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.sos, color: Color(0xFFC62828), size: 20),
-                            SizedBox(width: 4),
-                            Text(
-                              'SOS',
-                              style: TextStyle(
-                                color: Color(0xFFC62828),
-                                fontWeight: FontWeight.w800,
-                                fontSize: 14,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ],
+                        child: Text(
+                          'SOS',
+                          style: TextStyle(
+                            color: Color(0xFFC62828),
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                            letterSpacing: 0.5,
+                          ),
                         ),
                       ),
                     ),
