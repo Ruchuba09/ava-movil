@@ -34,149 +34,164 @@ class ReportQrScreen extends StatelessWidget {
         'action': 'close_report',
       });
 
-  String _formatDateTime(DateTime date) =>
-      '${date.day.toString().padLeft(2, '0')}-${date.month.toString().padLeft(2, '0')}-${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final canClose = DemoData.instance.canCloseReport(report);
     final hadConnection = report['hasConnectionAtCreation'] as bool? ?? false;
-    final createdAt =
-        report['createdAt'] as DateTime? ?? report['date'] as DateTime?;
+    final qrSize =
+        (MediaQuery.sizeOf(context).width - 88).clamp(180.0, 320.0).toDouble();
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('QR de cierre de flujo'),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Center(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+        child: Align(
+          alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 440),
-            child: Card(
-              elevation: 4,
-              color: isDark ? gris2Color : Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16)),
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
                     const Icon(Icons.check_circle,
-                        color: successColor, size: 52),
-                    const SizedBox(height: 12),
-                    Text(
-                      isNewReport ? '¡Reporte guardado!' : 'QR del reporte',
-                      style: const TextStyle(
-                          fontSize: 24, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Muestra este QR al encargado para abrir directamente el cierre del flujo.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                          color: isDark ? Colors.grey[400] : Colors.grey[600]),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: hadConnection
-                            ? const Color(0xFF1C3D3F)
-                            : const Color(0xFF432F2A),
-                        borderRadius: BorderRadius.circular(8),
+                        color: successColor, size: 32),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        isNewReport ? 'Reporte guardado' : 'QR del reporte',
+                        style: const TextStyle(
+                            fontSize: 24, fontWeight: FontWeight.bold),
                       ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(
-                            hadConnection ? Icons.wifi : Icons.wifi_off,
-                            color: hadConnection
-                                ? Colors.cyan
-                                : const Color(0xFFFF542E),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              hadConnection
-                                  ? 'Tiene conexión. Se registró una notificación en la aplicación para su encargado, para que complete el proceso.'
-                                  : 'Usted no tiene conexión. Diríjase a su encargado para completar el proceso.',
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (createdAt != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Tarjeta creada: ${_formatDateTime(createdAt)}',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                    const SizedBox(height: 8),
-                    Text(
-                      'El QR sirve para identificar la tarjeta y abrir su cierre; no indica por sí solo que se haya creado sin conexión.',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 18),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: QrImageView(
-                        data: _payload,
-                        version: QrVersions.auto,
-                        size: 180.0,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    if (canClose)
-                      ElevatedButton.icon(
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ReportDetailScreen(
-                              report: report,
-                              isLider: true,
-                            ),
-                          ),
-                        ),
-                        icon: const Icon(Icons.lock_open_rounded),
-                        label: const Text('Abrir cierre del flujo'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: verde6Color,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size.fromHeight(44),
-                        ),
-                      )
-                    else
-                      const Text(
-                        'Solo el jefe de cuadrilla asignado a este reporte puede cerrar este flujo.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: verde6Color,
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size(double.infinity, 44),
-                      ),
-                      child: const Text('Volver',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 20),
+                Text(
+                  'ACÉRCATE A TU SUPERVISOR AHORA',
+                  style: TextStyle(
+                    color: isDark ? verde5Color : const Color(0xFF477600),
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Pídele que escanee este QR para iniciar el cierre del reporte. Si no está cerca, asegúrate de que venga cuanto antes.',
+                  style: TextStyle(
+                    color: isDark ? Colors.white : const Color(0xFF202428),
+                    fontSize: 16,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: hadConnection
+                        ? (isDark
+                            ? const Color(0xFF203A2C)
+                            : const Color(0xFFE8F5D7))
+                        : (isDark
+                            ? const Color(0xFF432F2A)
+                            : const Color(0xFFFFE9E2)),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        hadConnection
+                            ? Icons.notifications_active
+                            : Icons.wifi_off,
+                        color: hadConnection
+                            ? (isDark ? verde5Color : const Color(0xFF477600))
+                            : const Color(0xFFC43D22),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          hadConnection
+                              ? 'Se avisó a tu supervisor. Muéstrale este QR.'
+                              : 'Sin conexión: avisa a tu supervisor y muéstrale este QR.',
+                          style: TextStyle(
+                            color:
+                                isDark ? Colors.white : const Color(0xFF202428),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            height: 1.3,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.16),
+                          blurRadius: 16,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: QrImageView(
+                      data: _payload,
+                      version: QrVersions.auto,
+                      size: qrSize,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Reporte ${report['id']} · ${report['reference']}',
+                  style: TextStyle(
+                    color: isDark ? Colors.grey[300] : Colors.grey[700],
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (canClose)
+                  ElevatedButton.icon(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ReportDetailScreen(
+                          report: report,
+                          isLider: true,
+                        ),
+                      ),
+                    ),
+                    icon: const Icon(Icons.lock_open_rounded),
+                    label: const Text('ABRIR CIERRE DEL REPORTE'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: verde6Color,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(52),
+                      textStyle: const TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                const SizedBox(height: 10),
+                OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                  child: const Text('Volver'),
+                ),
+              ],
             ),
           ),
         ),

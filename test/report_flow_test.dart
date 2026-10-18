@@ -2,6 +2,46 @@ import 'package:avamovil/dev/demo_data.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('demo login authenticates the four configured accounts', () {
+    final data = DemoData.instance;
+    final accounts = <String, String>{
+      'admin@ejemplo.cl': 'ADMINISTRADOR',
+      'analista@ejemplo.cl': 'ANALISTA',
+      'jfcua@ejemplo.cl': 'JEFE DE CUADRILLA',
+      'trabajador@ejemplo.cl': 'Operador',
+    };
+
+    for (final account in accounts.entries) {
+      expect(data.authenticate(account.key, '1234'), isTrue);
+      expect(data.currentUser['role'], account.value);
+    }
+    expect(data.authenticate('admin@ejemplo.cl', '1234'), isTrue);
+    expect(data.currentUserTeamReports.length, data.reports.length);
+    expect(data.canTriggerEmergencyAlert, isFalse);
+    expect(data.authenticate('analista@ejemplo.cl', '1234'), isTrue);
+    expect(data.currentUserTeamReports.length, data.reports.length);
+    expect(data.canTriggerEmergencyAlert, isFalse);
+    expect(data.authenticate('jfcua@ejemplo.cl', '1234'), isTrue);
+    expect(data.currentUserTeamReports.length, data.reports.length);
+    expect(data.canTriggerEmergencyAlert, isTrue);
+    expect(data.authenticate('trabajador@ejemplo.cl', '1234'), isTrue);
+    expect(data.isWorker, isTrue);
+    expect(data.currentUserTeamReports, data.currentUserReports);
+    expect(data.currentUserReports, isNotEmpty);
+    expect(
+      data.currentUserReports.every((report) =>
+          report['createdById'] == data.currentUser['id'] ||
+          report['subjectId'] == data.currentUser['id']),
+      isTrue,
+    );
+    expect(data.canTriggerEmergencyAlert, isTrue);
+
+    final currentUserId = data.currentUser['id'];
+    expect(data.authenticate('admin@ejemplo.cl', 'incorrecta'), isFalse);
+    expect(data.currentUser['id'], currentUserId);
+    expect(data.authenticate('desconocido@ejemplo.cl', '1234'), isFalse);
+  });
+
   test(
       'third-party reports route to the subject manager and require close data',
       () {
@@ -29,6 +69,10 @@ void main() {
     expect(report['hasConnectionAtCreation'], isTrue);
     expect(report['activityLog'], hasLength(2));
 
+    data.recordReportViewed(report);
+    expect(report['activityLog'], hasLength(3));
+    expect(report['activityLog'].last['type'], 'viewed');
+
     expect(
       () => data.closeReport(report, ' ', const ['evidencia.jpg']),
       throwsArgumentError,
@@ -44,7 +88,7 @@ void main() {
     expect(report['closeDescription'], 'Cierre válido');
     expect(report['closeEvidence'], ['evidencia.jpg']);
     expect(report['closedAt'], isA<DateTime>());
-    expect(report['activityLog'], hasLength(3));
+    expect(report['activityLog'], hasLength(4));
   });
 
   test('offline report keeps QR connection status without notifying manager',
@@ -80,6 +124,78 @@ void main() {
     expect(
       data.currentUserReports.any((report) => report['subjectId'] == 21),
       isTrue,
+    );
+  });
+
+  test('default user has self and third-party seeded reports', () {
+    final data = DemoData.instance;
+    data.signIn('carlos.gomez@empresa.cl');
+    final reports = data.currentUserReports;
+
+    expect(
+      reports.map((report) => report['id']),
+      containsAll(['#200', '#199', '#198']),
+    );
+    expect(
+      reports.firstWhere((report) => report['id'] == '#199')['isThirdParty'],
+      isTrue,
+    );
+    expect(
+      reports.firstWhere((report) => report['id'] == '#198')['subject'],
+      'Carlos Gómez',
+    );
+  });
+
+  test('management sees all reports while workers only see their own', () {
+    final data = DemoData.instance;
+    for (final email in [
+      'admin@ejemplo.cl',
+      'analista@ejemplo.cl',
+      'jfcua@ejemplo.cl',
+    ]) {
+      expect(data.authenticate(email, '1234'), isTrue);
+      expect(data.currentUserTeamReports, data.reports);
+    }
+
+    expect(data.authenticate('trabajador@ejemplo.cl', '1234'), isTrue);
+    expect(data.currentUserTeamReports, data.currentUserReports);
+    expect(data.currentUserReports.length, lessThan(data.reports.length));
+  });
+
+  test('emergency alert records its recipient and notification audit trail',
+      () {
+    final data = DemoData.instance;
+    data.authenticate('trabajador@ejemplo.cl', '1234');
+
+    final alert = data.triggerEmergencyAlert();
+    expect(alert['sender'], 'Juan Pérez');
+    expect(alert['recipient'], 'Carlos Gómez');
+    expect(alert['status'], 'REGISTRADA EN LA APLICACIÓN');
+    expect(alert['activityLog'], hasLength(2));
+
+    final notification = data.notifications.firstWhere(
+      (item) => item['emergencyAlertId'] == alert['id'],
+    );
+    expect(notification['recipientId'], 1);
+    expect(notification['read'], isFalse);
+    expect(notification['emergencyAlertId'], alert['id']);
+
+    data.authenticate('jfcua@ejemplo.cl', '1234');
+    expect(data.currentUserNotifications, contains(notification));
+    data.markNotificationRead(notification);
+    expect(notification['read'], isTrue);
+    expect(alert['activityLog'], hasLength(3));
+    expect(alert['activityLog'].last['type'], 'notification_viewed');
+
+    data.authenticate('jfcua@ejemplo.cl', '1234');
+    final supervisorAlert = data.triggerEmergencyAlert();
+    expect(supervisorAlert['recipient'], 'Administrador');
+    expect(supervisorAlert['recipientId'], 3);
+
+    data.signIn('admin@empresa.cl');
+    expect(
+      () => data.triggerEmergencyAlert(),
+      throwsA(isA<StateError>()),
     );
   });
 

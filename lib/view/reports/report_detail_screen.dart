@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
+import 'package:avamovil/view/reports/camera_access.dart';
 import 'package:avamovil/view/reports/report_qr_screen.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
@@ -26,6 +27,12 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   final TextEditingController _descController = TextEditingController();
   final List<String> _evidence = [];
   bool _showReportEvidence = false;
+
+  @override
+  void initState() {
+    super.initState();
+    DemoData.instance.recordReportViewed(widget.report);
+  }
 
   @override
   void dispose() {
@@ -71,6 +78,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     try {
       final paths = <String>[];
       if (source == 'camera') {
+        if (!await ensureCameraPermission(context) || !mounted) return;
         final image = await ImagePicker().pickImage(source: ImageSource.camera);
         if (image != null) paths.add(image.path);
       } else if (source == 'gallery') {
@@ -122,15 +130,16 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Reporte cerrado correctamente')),
     );
-    Navigator.pop(context, true);
+    Navigator.of(context)
+        .pushNamedAndRemoveUntil<void>('/home', (route) => false);
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isOpen = widget.report['status'] == 'ABIERTA';
-    final reportDate =
-        widget.report['createdAt'] as DateTime? ?? widget.report['date'] as DateTime;
+    final reportDate = widget.report['createdAt'] as DateTime? ??
+        widget.report['date'] as DateTime;
     final reportEvidence = (widget.report['evidence'] as List<dynamic>? ?? [])
         .map((path) => path.toString())
         .toList();
@@ -247,9 +256,8 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                                 : verde6Color,
                           ),
                           title: Text(activity['description'].toString()),
-                          subtitle: at is DateTime
-                              ? Text(_formatDateTime(at))
-                              : null,
+                          subtitle:
+                              at is DateTime ? Text(_formatDateTime(at)) : null,
                         );
                       }),
                     ],

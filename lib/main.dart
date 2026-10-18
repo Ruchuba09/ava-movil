@@ -22,10 +22,13 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final themeController = Provider.of<ThemeController>(context);
-    
+
     return MaterialApp(
       title: 'AVA Móvil',
       debugShowCheckedModeBanner: false,
+      routes: {
+        '/home': (context) => const HomeScreen(),
+      },
       themeMode: themeController.themeMode,
       theme: ThemeData(
         useMaterial3: true,
