@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
 
-var logger = Logger(
+final Logger logger = Logger(
   filter: DevelopmentFilter(),
   level: Level.all,
   output: ConsoleOutput(),
@@ -16,19 +16,20 @@ var logger = Logger(
   ),
 );
 
-void printDev(var message) {
+void printDev(Object? message) {
   if (kDebugMode) {
     if (message is String) {
       try {
-        var jsonObject = jsonDecode(message);
-        var jsonString = const JsonEncoder.withIndent('  ').convert(jsonObject);
+        final dynamic jsonObject = jsonDecode(message);
+        final String jsonString =
+            const JsonEncoder.withIndent('  ').convert(jsonObject);
 
         if (jsonString.length > 800) {
           _logLargeMessage(jsonString);
         } else {
           logger.d(jsonString);
         }
-      } catch (e) {
+      } catch (_) {
         if (message.length > 800) {
           _logLargeMessage(message);
         } else {
@@ -36,7 +37,8 @@ void printDev(var message) {
         }
       }
     } else if (message is Map || message is Iterable) {
-      var jsonString = const JsonEncoder.withIndent('  ').convert(message);
+      final String jsonString =
+          const JsonEncoder.withIndent('  ').convert(message);
       if (jsonString.length > 800) {
         _logLargeMessage(jsonString);
       } else {

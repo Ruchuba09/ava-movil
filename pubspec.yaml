@@ -116,6 +116,7 @@ dependencies:
   qr_flutter: ^4.1.0
   video_player: ^2.14.1
   open_filex: ^4.7.0
+  firebase_core: ^5.0.0
   
 dev_dependencies:
   flutter_test:
