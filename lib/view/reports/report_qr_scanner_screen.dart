@@ -104,25 +104,21 @@ class _ReportQrScannerScreenState extends State<ReportQrScannerScreen> {
     if (payload == null) return;
 
     _handlingScan = true;
-    final reportId = _reportIdFromPayload(payload);
     Map<String, dynamic>? report;
-    if (reportId != null) {
-      for (final candidate in DemoData.instance.reports) {
-        if (candidate['id'] == reportId) {
-          report = candidate;
-          break;
-        }
-      }
+    try {
+      report = _reportFromPayload(payload);
+    } on FormatException catch (error) {
+      await _showScanError(error.message);
+      return;
     }
 
     if (report == null) {
       await _showScanError(
-        reportId == null
-            ? 'El código QR no corresponde a una tarjeta PARE válida.'
-            : 'La tarjeta no está disponible en este dispositivo. Sin sincronización con un servidor, solo se pueden abrir tarjetas creadas en esta instalación.',
+        'El código QR no corresponde a una tarjeta PARE disponible.',
       );
       return;
     }
+    DemoData.instance.recordReportQrScanned(report);
     if (!mounted) return;
     await Navigator.of(context).pushReplacement<void, void>(
       MaterialPageRoute(
@@ -134,16 +130,38 @@ class _ReportQrScannerScreenState extends State<ReportQrScannerScreen> {
     );
   }
 
-  String? _reportIdFromPayload(String payload) {
+  Map<String, dynamic>? _reportFromPayload(String payload) {
+    final demoData = DemoData.instance;
     try {
       final decoded = jsonDecode(payload);
-      if (decoded is Map && decoded['id'] is String) {
-        return decoded['id'] as String;
+      if (decoded is Map) {
+        final sharedReport = decoded['report'];
+        if (sharedReport is Map) {
+          return demoData.importReportFromQr(sharedReport);
+        }
+        final reportId = decoded['id'];
+        if (reportId is String &&
+            (decoded['action'] == 'sync_report' ||
+                decoded['action'] == 'close_report')) {
+          return demoData.importReportFromQr(decoded);
+        }
+        if (reportId is String) {
+          final matches = demoData.reports.where(
+            (report) => report['id'] == reportId,
+          );
+          return matches.isEmpty ? null : matches.first;
+        }
       }
-      return null;
     } on FormatException {
-      return payload.startsWith('#') ? payload : null;
+      if (payload.startsWith('#')) {
+        final matches = demoData.reports.where(
+          (report) => report['id'] == payload,
+        );
+        return matches.isEmpty ? null : matches.first;
+      }
+      rethrow;
     }
+    return null;
   }
 
   Future<void> _showScanError(String message) async {
@@ -166,116 +184,115 @@ class _ReportQrScannerScreenState extends State<ReportQrScannerScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Escanear QR de Tarjeta PARE')),
-        body: MobileScanner(
-          controller: _controller,
-          onDetect: _handleDetection,
-          errorBuilder: (context, error) => _buildCameraError(
-            context,
-            _cameraRetryError ?? _cameraErrorMessage(error),
-          ),
-          placeholderBuilder: (context) => const ColoredBox(
-            color: Colors.black,
-            child: Center(
-              child: CircularProgressIndicator(color: Colors.white),
+    appBar: AppBar(title: const Text('Escanear QR de Tarjeta PARE')),
+    body: MobileScanner(
+      controller: _controller,
+      onDetect: _handleDetection,
+      errorBuilder: (context, error) => _buildCameraError(
+        context,
+        _cameraRetryError ?? _cameraErrorMessage(error),
+      ),
+      placeholderBuilder: (context) => const ColoredBox(
+        color: Colors.black,
+        child: Center(child: CircularProgressIndicator(color: Colors.white)),
+      ),
+      overlayBuilder: (context, constraints) => Stack(
+        fit: StackFit.expand,
+        children: [
+          Center(
+            child: Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white, width: 3),
+                borderRadius: BorderRadius.circular(20),
+              ),
             ),
           ),
-          overlayBuilder: (context, constraints) => Stack(
-            fit: StackFit.expand,
-            children: [
-              Center(
-                child: Container(
-                  width: 260,
-                  height: 260,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.white, width: 3),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
+          Positioned(
+            left: 24,
+            right: 24,
+            bottom: 40,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.7),
+                borderRadius: BorderRadius.circular(8),
               ),
-              Positioned(
-                left: 24,
-                right: 24,
-                bottom: 40,
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.7),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    'Centra el código QR dentro del recuadro.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ),
+              child: const Text(
+                'Centra el código QR dentro del recuadro.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white),
               ),
-            ],
+            ),
           ),
-        ),
-      );
+        ],
+      ),
+    ),
+  );
 
   Widget _buildCameraError(BuildContext context, String message) => ColoredBox(
-        color: Colors.black,
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.no_photography_outlined,
-                    color: Colors.white, size: 56),
-                const SizedBox(height: 16),
-                const Text(
-                  'No se puede acceder a la cámara',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70),
-                ),
-                const SizedBox(height: 20),
-                FilledButton.icon(
-                  onPressed: _isRetryingCamera ? null : _retryCamera,
-                  icon: _isRetryingCamera
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.refresh),
-                  label: Text(
-                    _isRetryingCamera ? 'Iniciando cámara...' : 'Reintentar',
-                  ),
-                ),
-                if (_canOpenAppSettings) ...[
-                  const SizedBox(height: 8),
-                  TextButton.icon(
-                    onPressed: _openCameraSettings,
-                    icon: const Icon(Icons.settings),
-                    label: const Text('Abrir ajustes de la aplicación'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ] else if (kIsWeb) ...[
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Revisa los permisos de cámara del sitio en tu navegador.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                ],
-              ],
+    color: Colors.black,
+    child: Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.no_photography_outlined,
+              color: Colors.white,
+              size: 56,
             ),
-          ),
+            const SizedBox(height: 16),
+            const Text(
+              'No se puede acceder a la cámara',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: _isRetryingCamera ? null : _retryCamera,
+              icon: _isRetryingCamera
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh),
+              label: Text(
+                _isRetryingCamera ? 'Iniciando cámara...' : 'Reintentar',
+              ),
+            ),
+            if (_canOpenAppSettings) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: _openCameraSettings,
+                icon: const Icon(Icons.settings),
+                label: const Text('Abrir ajustes de la aplicación'),
+                style: TextButton.styleFrom(foregroundColor: Colors.white),
+              ),
+            ] else if (kIsWeb) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Revisa los permisos de cámara del sitio en tu navegador.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70),
+              ),
+            ],
+          ],
         ),
-      );
+      ),
+    ),
+  );
 }

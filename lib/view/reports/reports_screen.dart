@@ -64,6 +64,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
       ? 'dd-mm-aaaa'
       : '${date.day.toString().padLeft(2, '0')}-${date.month.toString().padLeft(2, '0')}-${date.year}';
 
+  String _shortReportId(String id) =>
+      id.startsWith('#LOCAL-') ? '#${id.substring(id.length - 6)}' : id;
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -75,18 +78,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
         final sourceReports = widget.onlyCurrentUser
             ? demoData.currentUserReports
             : widget.onlyCurrentTeam
-                ? demoData.currentUserTeamReports
-                : demoData.reports;
+            ? demoData.currentUserTeamReports
+            : demoData.reports;
         final matchingReports = sourceReports.where((report) {
           final date = report['date'] as DateTime;
-          final passProject = _projectFilter == 'Todos los proyectos' ||
+          final passProject =
+              _projectFilter == 'Todos los proyectos' ||
               report['project'] == _projectFilter;
-          final passCondition = _conditionFilter == 'Todas' ||
+          final passCondition =
+              _conditionFilter == 'Todas' ||
               report['condition'] == _conditionFilter;
-          final passStatus = _statusFilter == 'Todos' ||
+          final passStatus =
+              _statusFilter == 'Todos' ||
               report['status'] == _statusFilter.toUpperCase();
           final internalId = _internalIdController.text.trim().toLowerCase();
-          final passInternalId = internalId.isEmpty ||
+          final passInternalId =
+              internalId.isEmpty ||
               (report['id'] as String).toLowerCase().contains(internalId);
           final passFrom = _fromDate == null || !date.isBefore(_fromDate!);
           final dayAfterTo = _toDate == null
@@ -113,22 +120,24 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                      widget.onlyCurrentUser
-                          ? 'Mis Reportes'
-                          : widget.onlyCurrentTeam
-                              ? 'Reportes de la cuadrilla'
-                              : 'Listado Tarjeta PARE',
-                      style:
-                          TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                    widget.onlyCurrentUser
+                        ? 'Mis Reportes'
+                        : widget.onlyCurrentTeam
+                        ? 'Reportes de la cuadrilla'
+                        : 'Listado Tarjeta PARE',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 4),
                   Text(
-                      widget.onlyCurrentUser
-                          ? 'Tarjetas creadas por ti o asociadas a tu usuario.'
-                          : widget.onlyCurrentTeam
-                              ? 'Reportes asignados a tu cuadrilla para revisar y cerrar.'
-                              : 'Listado de reportes registrados.',
-                      style: TextStyle(
-                          color: isDark ? Colors.grey[400] : Colors.grey[700])),
+                    widget.onlyCurrentUser
+                        ? 'Tarjetas creadas por ti o asociadas a tu usuario.'
+                        : widget.onlyCurrentTeam
+                        ? 'Reportes asignados a tu cuadrilla para revisar y cerrar.'
+                        : 'Listado de reportes registrados.',
+                    style: TextStyle(
+                      color: isDark ? Colors.grey[400] : Colors.grey[700],
+                    ),
+                  ),
                   const SizedBox(height: 6),
                   Theme(
                     data: Theme.of(context).copyWith(
@@ -161,13 +170,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                   child: SelectionField<String>(
                                     label: 'Proyecto',
                                     value: _projectFilter,
-                                    options: [
-                                      'Todos los proyectos',
-                                      ...DemoData.projects,
-                                    ]
-                                        .map((option) => SelectionOption(
-                                            value: option, label: option))
-                                        .toList(),
+                                    options:
+                                        [
+                                              'Todos los proyectos',
+                                              ...DemoData.projects,
+                                            ]
+                                            .map(
+                                              (option) => SelectionOption(
+                                                value: option,
+                                                label: option,
+                                              ),
+                                            )
+                                            .toList(),
                                     onChanged: (value) {
                                       if (value != null) {
                                         setState(() => _projectFilter = value);
@@ -180,18 +194,27 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                   child: SelectionField<String>(
                                     label: 'Condición',
                                     value: _conditionFilter,
-                                    options: [
-                                      'Todas',
-                                      ...List.generate(
-                                          10, (index) => '#${index + 1}'),
-                                    ]
-                                        .map((option) => SelectionOption(
-                                            value: option, label: option))
-                                        .toList(),
+                                    options:
+                                        [
+                                              'Todas',
+                                              ...List.generate(
+                                                10,
+                                                (index) => '#${index + 1}',
+                                              ),
+                                            ]
+                                            .map(
+                                              (option) => SelectionOption(
+                                                value: option,
+                                                label: option,
+                                              ),
+                                            )
+                                            .toList(),
                                     optionRows: [
                                       const [
                                         SelectionOption(
-                                            value: 'Todas', label: 'Todas'),
+                                          value: 'Todas',
+                                          label: 'Todas',
+                                        ),
                                       ],
                                       List.generate(
                                         5,
@@ -211,7 +234,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                     onChanged: (value) {
                                       if (value != null) {
                                         setState(
-                                            () => _conditionFilter = value);
+                                          () => _conditionFilter = value,
+                                        );
                                       }
                                     },
                                   ),
@@ -222,8 +246,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                     label: 'Estado',
                                     value: _statusFilter,
                                     options: ['Todos', 'Abierta', 'Cerrada']
-                                        .map((option) => SelectionOption(
-                                            value: option, label: option))
+                                        .map(
+                                          (option) => SelectionOption(
+                                            value: option,
+                                            label: option,
+                                          ),
+                                        )
                                         .toList(),
                                     onChanged: (value) {
                                       if (value != null) {
@@ -242,7 +270,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                       prefixIcon: const Icon(Icons.tag),
                                       contentPadding:
                                           const EdgeInsets.symmetric(
-                                              horizontal: 10, vertical: 8),
+                                            horizontal: 10,
+                                            vertical: 8,
+                                          ),
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(8),
                                       ),
@@ -295,14 +325,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Text('${filteredReports.length} reportes',
-                  style: Theme.of(context).textTheme.labelMedium),
+              child: Text(
+                '${filteredReports.length} reportes',
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
             ),
             Expanded(
               child: filteredReports.isEmpty
                   ? const Center(
                       child: Text(
-                          'No hay reportes para los filtros seleccionados.'))
+                        'No hay reportes para los filtros seleccionados.',
+                      ),
+                    )
                   : ListView.builder(
                       itemCount: filteredReports.length,
                       itemBuilder: (context, index) {
@@ -315,44 +349,53 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         final createdBy =
                             (report['createdBy'] ?? report['reporter'])
                                 .toString();
-                        final statusColor =
-                            isOpen ? const Color(0xFFFF542E) : Colors.cyan;
+                        final statusColor = isOpen
+                            ? const Color(0xFFFF542E)
+                            : Colors.cyan;
                         final cardColor = isOpen
                             ? (isDark
-                                ? const Color(0xFF432F2A)
-                                : const Color(0xFFFFE9E2))
+                                  ? const Color(0xFF203A2C)
+                                  : const Color(0xFFE8F5E9))
                             : (isDark
-                                ? const Color(0xFF1C3D3F)
-                                : const Color(0xFFE0F5F3));
+                                  ? const Color(0xFF1C3428)
+                                  : const Color(0xFFE1F0E2));
                         return Card(
                           margin: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 6),
+                            horizontal: 16,
+                            vertical: 6,
+                          ),
                           color: cardColor,
                           elevation: 2,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                             side: BorderSide(
-                                color: statusColor.withValues(alpha: 0.8)),
+                              color: statusColor.withValues(alpha: 0.8),
+                            ),
                           ),
                           clipBehavior: Clip.antiAlias,
                           child: InkWell(
                             onTap: () => _openReport(report),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 12),
+                                horizontal: 12,
+                                vertical: 12,
+                              ),
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
                                   if (widget.onlyCurrentUser) ...[
                                     CircleAvatar(
                                       radius: 20,
-                                      backgroundColor:
-                                          statusColor.withValues(alpha: 0.16),
-                                      child: Text(report['id'] as String,
-                                          style: const TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 10)
-                                              .copyWith(color: statusColor)),
+                                      backgroundColor: statusColor.withValues(
+                                        alpha: 0.16,
+                                      ),
+                                      child: Text(
+                                        _shortReportId(report['id'] as String),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 10,
+                                        ).copyWith(color: statusColor),
+                                      ),
                                     ),
                                     const SizedBox(width: 10),
                                   ],
@@ -367,14 +410,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                               child: Text(
                                                 widget.onlyCurrentUser
                                                     ? report['project']
-                                                        as String
+                                                          as String
                                                     : createdBy,
                                                 style: TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   fontSize:
                                                       widget.onlyCurrentUser
-                                                          ? null
-                                                          : 17,
+                                                      ? null
+                                                      : 17,
                                                 ),
                                                 maxLines: widget.onlyCurrentUser
                                                     ? 1
@@ -399,14 +442,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                         const SizedBox(height: 3),
                                         Text(
                                           report['reference'] as String,
-                                          maxLines:
-                                              widget.onlyCurrentUser ? 1 : null,
+                                          maxLines: widget.onlyCurrentUser
+                                              ? 1
+                                              : null,
                                           overflow: widget.onlyCurrentUser
                                               ? TextOverflow.ellipsis
                                               : null,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall,
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.bodySmall,
                                         ),
                                         const SizedBox(height: 4),
                                         if (widget.onlyCurrentUser)
@@ -456,22 +500,30 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Widget _dateField(
-      String label, String value, VoidCallback onTap, bool isDark) {
+    String label,
+    String value,
+    VoidCallback onTap,
+    bool isDark,
+  ) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: InputDecorator(
         decoration: InputDecoration(
-            labelText: label,
-            suffixIcon: const Icon(Icons.calendar_today, size: 16),
-            filled: true,
-            fillColor: isDark ? gris2Color : Colors.white,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
-        child: Text(value,
-            style:
-                TextStyle(color: value == 'dd-mm-aaaa' ? Colors.grey : null)),
+          labelText: label,
+          suffixIcon: const Icon(Icons.calendar_today, size: 16),
+          filled: true,
+          fillColor: isDark ? gris2Color : Colors.white,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 8,
+          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        child: Text(
+          value,
+          style: TextStyle(color: value == 'dd-mm-aaaa' ? Colors.grey : null),
+        ),
       ),
     );
   }

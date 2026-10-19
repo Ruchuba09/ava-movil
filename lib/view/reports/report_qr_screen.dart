@@ -17,35 +17,25 @@ class ReportQrScreen extends StatelessWidget {
   });
 
   String get _payload => jsonEncode({
-        'id': report['id'],
-        'project': report['project'],
-        'reference': report['reference'],
-        'condition': report['condition'],
-        'conditionText': report['conditionText'],
-        'description': report['description'],
-        'status': report['status'],
-        'createdAt': (report['createdAt'] ?? report['date']).toString(),
-        'hasConnectionAtCreation': report['hasConnectionAtCreation'],
-        'reporterId': report['reporterId'],
-        'reporter': report['reporter'],
-        'managerId': report['managerId'],
-        'manager': report['manager'],
-        'originalManager': report['originalManager'],
-        'action': 'close_report',
-      });
+    'version': 2,
+    'action': 'sync_report',
+    'id': report['id'],
+    'report': DemoData.instance.reportForQr(report),
+  });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final canClose = DemoData.instance.canCloseReport(report);
-    final hadConnection = report['hasConnectionAtCreation'] as bool? ?? false;
-    final qrSize =
-        (MediaQuery.sizeOf(context).width - 88).clamp(180.0, 320.0).toDouble();
+    final demoData = DemoData.instance;
+    final canClose =
+        report['status'] == 'ABIERTA' && demoData.canCloseReport(report);
+    final otherRole = demoData.isWorker ? 'tu supervisor' : 'el trabajador';
+    final qrSize = (MediaQuery.sizeOf(context).width - 88)
+        .clamp(180.0, 320.0)
+        .toDouble();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('QR de cierre de flujo'),
-      ),
+      appBar: AppBar(title: const Text('Compartir Tarjeta PARE')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
         child: Align(
@@ -57,21 +47,26 @@ class ReportQrScreen extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.check_circle,
-                        color: successColor, size: 32),
+                    const Icon(
+                      Icons.check_circle,
+                      color: successColor,
+                      size: 32,
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        isNewReport ? 'Reporte guardado' : 'QR del reporte',
+                        isNewReport ? 'Reporte guardado' : 'QR para compartir',
                         style: const TextStyle(
-                            fontSize: 24, fontWeight: FontWeight.bold),
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  'ACÉRCATE A TU SUPERVISOR AHORA',
+                  'MUESTRA ESTE QR A ${otherRole.toUpperCase()}',
                   style: TextStyle(
                     color: isDark ? verde5Color : const Color(0xFF477600),
                     fontSize: 20,
@@ -81,7 +76,7 @@ class ReportQrScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Pídele que escanee este QR para iniciar el cierre del reporte. Si no está cerca, asegúrate de que venga cuanto antes.',
+                  'Al escanearlo, la otra persona recibirá la tarjeta y su trazabilidad. Este intercambio funciona sin internet.',
                   style: TextStyle(
                     color: isDark ? Colors.white : const Color(0xFF202428),
                     fontSize: 16,
@@ -93,34 +88,25 @@ class ReportQrScreen extends StatelessWidget {
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: hadConnection
-                        ? (isDark
-                            ? const Color(0xFF203A2C)
-                            : const Color(0xFFE8F5D7))
-                        : (isDark
-                            ? const Color(0xFF432F2A)
-                            : const Color(0xFFFFE9E2)),
+                    color: isDark
+                        ? const Color(0xFF203A2C)
+                        : const Color(0xFFE8F5D7),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
                     children: [
                       Icon(
-                        hadConnection
-                            ? Icons.notifications_active
-                            : Icons.wifi_off,
-                        color: hadConnection
-                            ? (isDark ? verde5Color : const Color(0xFF477600))
-                            : const Color(0xFFC43D22),
+                        Icons.sync_alt,
+                        color: isDark ? verde5Color : const Color(0xFF477600),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          hadConnection
-                              ? 'Se avisó a tu supervisor. Muéstrale este QR.'
-                              : 'Sin conexión: avisa a tu supervisor y muéstrale este QR.',
+                          'El QR transfiere los datos de la tarjeta, no los archivos adjuntos guardados en el otro teléfono.',
                           style: TextStyle(
-                            color:
-                                isDark ? Colors.white : const Color(0xFF202428),
+                            color: isDark
+                                ? Colors.white
+                                : const Color(0xFF202428),
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
                             height: 1.3,
@@ -167,10 +153,8 @@ class ReportQrScreen extends StatelessWidget {
                     onPressed: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => ReportDetailScreen(
-                          report: report,
-                          isLider: true,
-                        ),
+                        builder: (context) =>
+                            ReportDetailScreen(report: report, isLider: true),
                       ),
                     ),
                     icon: const Icon(Icons.lock_open_rounded),
@@ -180,7 +164,9 @@ class ReportQrScreen extends StatelessWidget {
                       foregroundColor: Colors.white,
                       minimumSize: const Size.fromHeight(52),
                       textStyle: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.bold),
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 const SizedBox(height: 10),
