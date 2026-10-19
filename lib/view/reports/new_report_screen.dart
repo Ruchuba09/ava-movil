@@ -71,7 +71,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
       } else if (source == 'gallery') {
         picked.addAll(await ImagePicker().pickMultiImage());
       } else {
-        final result = await FilePicker.platform.pickFiles(
+        final result = await FilePicker.pickFiles(
           type: FileType.any,
           allowMultiple: true,
         );

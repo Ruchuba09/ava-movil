@@ -85,7 +85,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         paths.addAll(
             (await ImagePicker().pickMultiImage()).map((file) => file.path));
       } else {
-        final result = await FilePicker.platform.pickFiles(
+        final result = await FilePicker.pickFiles(
           type: FileType.any,
           allowMultiple: true,
         );
