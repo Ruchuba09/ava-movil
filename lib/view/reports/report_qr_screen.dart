@@ -151,7 +151,7 @@ class ReportQrScreen extends StatelessWidget {
                   ),
                 const SizedBox(height: 14),
                 Text(
-                  'Reporte ${report['id']} · ${report['reference']}',
+                  'Reporte ${demoData.reportDisplayId(report)} · ${report['reference']}',
                   style: TextStyle(
                     color: isDark ? Colors.grey[300] : Colors.grey[700],
                     fontSize: 14,

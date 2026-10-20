@@ -64,9 +64,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
       ? 'dd-mm-aaaa'
       : '${date.day.toString().padLeft(2, '0')}-${date.month.toString().padLeft(2, '0')}-${date.year}';
 
-  String _shortReportId(String id) =>
-      id.startsWith('#LOCAL-') ? '#${id.substring(id.length - 6)}' : id;
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -94,6 +91,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
           final internalId = _internalIdController.text.trim().toLowerCase();
           final passInternalId =
               internalId.isEmpty ||
+              demoData
+                  .reportDisplayId(report)
+                  .toLowerCase()
+                  .contains(internalId) ||
               (report['id'] as String).toLowerCase().contains(internalId);
           final passFrom = _fromDate == null || !date.isBefore(_fromDate!);
           final dayAfterTo = _toDate == null
@@ -386,7 +387,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                         alpha: 0.08,
                                       ),
                                       child: Text(
-                                        _shortReportId(report['id'] as String),
+                                        demoData.reportDisplayId(report),
                                         style: const TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 10,

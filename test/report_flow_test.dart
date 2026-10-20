@@ -147,6 +147,8 @@ void main() {
       final workerReport = data.reports.first;
       final workerQr = data.reportForQr(workerReport);
       expect(workerReport['id'], startsWith('#LOCAL-'));
+      expect(workerReport['displayId'], matches(RegExp(r'^#\d+$')));
+      expect(workerQr['displayId'], workerReport['displayId']);
       expect(workerQr['evidenceCount'], 1);
 
       data.reports.remove(workerReport);
@@ -195,6 +197,12 @@ void main() {
         hasConnection: false,
       );
       expect(data.reports.first['id'], isNot(workerReport['id']));
+      expect(
+        int.parse(
+              (data.reports.first['displayId'] as String).substring(1),
+            ),
+        int.parse((workerReport['displayId'] as String).substring(1)) + 1,
+      );
     },
   );
 

@@ -172,7 +172,9 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Detalle de Evento ${widget.report['id']}'),
+        title: Text(
+          'Detalle de Evento ${DemoData.instance.reportDisplayId(widget.report)}',
+        ),
         actions: widget.report['hasConnectionAtCreation'] == false
             ? [
                 IconButton(

@@ -27,6 +27,9 @@ class DemoData extends ChangeNotifier {
       },
     ]);
   }
+  if (remote['displayId'] is String) {
+    local['displayId'] = remote['displayId'];
+  }
 
   static final DemoData instance = DemoData._();
 
@@ -230,8 +233,27 @@ class DemoData extends ChangeNotifier {
     return currentUser['id'] == managerId;
   }
 
+  String reportDisplayId(Map<String, dynamic> report) {
+    final displayId = report['displayId'];
+    if (displayId is String) return displayId;
+    final id = report['id'] as String;
+    return id.startsWith('#LOCAL-') ? _nextReportDisplayId() : id;
+  }
+
+  String _nextReportDisplayId() {
+    final highestId = reports.fold<int>(200, (highest, report) {
+      final displayId = report['displayId'] ?? report['id'];
+      final number = int.tryParse(
+        displayId.toString().replaceFirst(RegExp(r'^#'), ''),
+      );
+      return number != null && number > highest ? number : highest;
+    });
+    return '#${highestId + 1}';
+  }
+
   Map<String, dynamic> reportForQr(Map<String, dynamic> report) => {
     'id': report['id'],
+    'displayId': reportDisplayId(report),
     'project': report['project'],
     'condition': report['condition'],
     'conditionText': report['conditionText'],
@@ -288,6 +310,9 @@ class DemoData extends ChangeNotifier {
     final activityLog = _parseQrActivityLog(payload['activityLog']);
     final remoteReport = <String, dynamic>{
       'id': id,
+      'displayId': payload['displayId'] is String
+          ? payload['displayId']
+          : (id.startsWith('#LOCAL-') ? _nextReportDisplayId() : id),
       'project': project,
       'condition': condition,
       'conditionText': conditionText,
@@ -445,10 +470,12 @@ class DemoData extends ChangeNotifier {
     final responsibleId = managerId;
     final responsible = manager;
     final reportId = '#LOCAL-${const Uuid().v4()}';
+    final displayId = _nextReportDisplayId();
     final subject = subjectWorker ?? reporter;
     final createdAt = DateTime.now();
     final report = <String, dynamic>{
       'id': reportId,
+      'displayId': displayId,
       'project': project,
       'condition': '#${conditions.indexOf(condition) + 1}',
       'conditionText': condition,
@@ -843,6 +870,7 @@ class DemoData extends ChangeNotifier {
       final manager = managerId == 1 ? 'Carlos Gómez' : 'Patricia Rojas';
       reports.add({
         'id': '#${200 - index}',
+        'displayId': '#${200 - index}',
         'project': project,
         'condition': '#${conditionIndex + 1}',
         'conditionText': conditions[conditionIndex],
