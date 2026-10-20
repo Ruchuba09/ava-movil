@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:avamovil/dev/demo_data.dart';
+import 'package:avamovil/view/reports/camera_access.dart';
 import 'package:avamovil/view/reports/report_detail_screen.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -22,7 +23,14 @@ class _ReportQrScannerScreenState extends State<ReportQrScannerScreen> {
   );
   bool _handlingScan = false;
   bool _isRetryingCamera = false;
+  bool _checkingCameraPermission = true;
   String? _cameraRetryError;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _requestCameraAccess());
+  }
 
   bool get _canOpenAppSettings =>
       !kIsWeb &&
@@ -30,12 +38,31 @@ class _ReportQrScannerScreenState extends State<ReportQrScannerScreen> {
           defaultTargetPlatform == TargetPlatform.iOS);
 
   Future<void> _retryCamera() async {
+    final wasPermissionBlocked = _cameraRetryError != null;
     setState(() {
       _isRetryingCamera = true;
-      _cameraRetryError = null;
+      if (wasPermissionBlocked) _checkingCameraPermission = true;
     });
     try {
-      await _controller.start();
+      if (!await ensureCameraPermission(context)) {
+        if (mounted) {
+          setState(() {
+            _checkingCameraPermission = false;
+            _cameraRetryError =
+                'Permite el acceso a la cámara para escanear QR.';
+          });
+        }
+        return;
+      }
+      if (!mounted) return;
+      if (wasPermissionBlocked) {
+        setState(() {
+          _checkingCameraPermission = false;
+          _cameraRetryError = null;
+        });
+      } else {
+        await _controller.start();
+      }
     } on MobileScannerException catch (error) {
       if (mounted) {
         setState(() => _cameraRetryError = _cameraErrorMessage(error));
@@ -50,6 +77,21 @@ class _ReportQrScannerScreenState extends State<ReportQrScannerScreen> {
     } finally {
       if (mounted) setState(() => _isRetryingCamera = false);
     }
+  }
+
+  Future<void> _requestCameraAccess() async {
+    if (!DemoData.instance.canScanReportQr) {
+      if (mounted) setState(() => _checkingCameraPermission = false);
+      return;
+    }
+    final granted = await ensureCameraPermission(context);
+    if (!mounted) return;
+    setState(() {
+      _checkingCameraPermission = false;
+      if (!granted) {
+        _cameraRetryError = 'Permite el acceso a la cámara para escanear QR.';
+      }
+    });
   }
 
   Future<void> _openCameraSettings() async {
@@ -185,50 +227,68 @@ class _ReportQrScannerScreenState extends State<ReportQrScannerScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Escanear QR de Tarjeta PARE')),
-    body: MobileScanner(
-      controller: _controller,
-      onDetect: _handleDetection,
-      errorBuilder: (context, error) => _buildCameraError(
-        context,
-        _cameraRetryError ?? _cameraErrorMessage(error),
-      ),
-      placeholderBuilder: (context) => const ColoredBox(
-        color: Colors.black,
-        child: Center(child: CircularProgressIndicator(color: Colors.white)),
-      ),
-      overlayBuilder: (context, constraints) => Stack(
-        fit: StackFit.expand,
-        children: [
-          Center(
-            child: Container(
-              width: 260,
-              height: 260,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white, width: 3),
-                borderRadius: BorderRadius.circular(20),
+    body: !DemoData.instance.canScanReportQr
+        ? const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text('Solo el supervisor puede escanear tarjetas PARE.'),
+            ),
+          )
+        : _checkingCameraPermission
+        ? const ColoredBox(
+            color: Colors.black,
+            child: Center(
+              child: CircularProgressIndicator(color: Colors.white),
+            ),
+          )
+        : _cameraRetryError != null
+        ? _buildCameraError(context, _cameraRetryError!)
+        : MobileScanner(
+            controller: _controller,
+            onDetect: _handleDetection,
+            errorBuilder: (context, error) => _buildCameraError(
+              context,
+              _cameraRetryError ?? _cameraErrorMessage(error),
+            ),
+            placeholderBuilder: (context) => const ColoredBox(
+              color: Colors.black,
+              child: Center(
+                child: CircularProgressIndicator(color: Colors.white),
               ),
             ),
-          ),
-          Positioned(
-            left: 24,
-            right: 24,
-            bottom: 40,
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.7),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Text(
-                'Centra el código QR dentro del recuadro.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white),
-              ),
+            overlayBuilder: (context, constraints) => Stack(
+              fit: StackFit.expand,
+              children: [
+                Center(
+                  child: Container(
+                    width: 260,
+                    height: 260,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.white, width: 3),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 24,
+                  right: 24,
+                  bottom: 40,
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'Centra el código QR dentro del recuadro.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
-      ),
-    ),
   );
 
   Widget _buildCameraError(BuildContext context, String message) => ColoredBox(

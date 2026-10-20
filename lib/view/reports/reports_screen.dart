@@ -353,12 +353,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             ? const Color(0xFFFF542E)
                             : Colors.cyan;
                         final cardColor = isOpen
-                            ? (isDark
-                                  ? const Color(0xFF203A2C)
-                                  : const Color(0xFFE8F5E9))
-                            : (isDark
-                                  ? const Color(0xFF1C3428)
-                                  : const Color(0xFFE1F0E2));
+                            ? verde5Color
+                            : Colors.cyan.shade100;
                         return Card(
                           margin: const EdgeInsets.symmetric(
                             horizontal: 16,
@@ -386,15 +382,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                   if (widget.onlyCurrentUser) ...[
                                     CircleAvatar(
                                       radius: 20,
-                                      backgroundColor: statusColor.withValues(
-                                        alpha: 0.16,
+                                      backgroundColor: Colors.black.withValues(
+                                        alpha: 0.08,
                                       ),
                                       child: Text(
                                         _shortReportId(report['id'] as String),
                                         style: const TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 10,
-                                        ).copyWith(color: statusColor),
+                                          color: Colors.black,
+                                        ),
                                       ),
                                     ),
                                     const SizedBox(width: 10),
@@ -413,6 +410,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                                           as String
                                                     : createdBy,
                                                 style: TextStyle(
+                                                  color: Colors.black,
                                                   fontWeight: FontWeight.bold,
                                                   fontSize:
                                                       widget.onlyCurrentUser
@@ -431,7 +429,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                             Text(
                                               isOpen ? 'ABIERTA' : 'CERRADA',
                                               style: TextStyle(
-                                                color: statusColor,
+                                                color: isOpen
+                                                    ? const Color(0xFFFF542E)
+                                                    : Colors.cyan.shade900,
                                                 fontSize: 10,
                                                 letterSpacing: 0.3,
                                                 fontWeight: FontWeight.bold,
@@ -448,9 +448,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                           overflow: widget.onlyCurrentUser
                                               ? TextOverflow.ellipsis
                                               : null,
-                                          style: Theme.of(
-                                            context,
-                                          ).textTheme.bodySmall,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(color: Colors.black),
                                         ),
                                         const SizedBox(height: 4),
                                         if (widget.onlyCurrentUser)
@@ -461,7 +462,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                             style: Theme.of(context)
                                                 .textTheme
                                                 .bodySmall
-                                                ?.copyWith(color: statusColor),
+                                                ?.copyWith(color: Colors.black),
                                           )
                                         else ...[
                                           Text(
@@ -471,7 +472,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                             style: Theme.of(context)
                                                 .textTheme
                                                 .bodySmall
-                                                ?.copyWith(color: statusColor),
+                                                ?.copyWith(color: Colors.black),
                                           ),
                                           const SizedBox(height: 4),
                                           Text(

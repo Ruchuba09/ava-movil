@@ -190,6 +190,11 @@ class DemoData extends ChangeNotifier {
 
   bool get isWorker => currentUser['leaderId'] is int;
 
+  bool get canScanReportQr {
+    final role = currentUser['role'] as String;
+    return role.startsWith('JEFE') || role.startsWith('JEFA');
+  }
+
   int get currentUserLeaderId =>
       (currentUser['leaderId'] ?? currentUser['id']) as int;
 

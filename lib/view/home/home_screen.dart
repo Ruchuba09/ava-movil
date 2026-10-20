@@ -5,6 +5,7 @@ import 'package:google_nav_bar/google_nav_bar.dart';
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/auth/login_screen.dart';
+import 'package:avamovil/view/reports/camera_access.dart';
 import 'package:avamovil/view/reports/reports_screen.dart';
 import 'package:avamovil/view/reports/new_report_screen.dart';
 import 'package:avamovil/view/reports/report_detail_screen.dart';
@@ -202,6 +203,17 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _scanReportQr() async {
+    if (!DemoData.instance.canScanReportQr) return;
+    if (!await ensureCameraPermission(context) || !mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (context) => const ReportQrScannerScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -266,16 +278,12 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                IconButton(
-                  tooltip: 'Escanear QR de Tarjeta PARE',
-                  icon: const Icon(Icons.qr_code_scanner),
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (context) => const ReportQrScannerScreen(),
-                    ),
+                if (demoData.canScanReportQr)
+                  IconButton(
+                    tooltip: 'Escanear QR de Tarjeta PARE',
+                    icon: const Icon(Icons.qr_code_scanner),
+                    onPressed: _scanReportQr,
                   ),
-                ),
                 if (isWorker)
                   IconButton(
                     tooltip: isDark

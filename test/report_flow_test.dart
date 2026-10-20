@@ -1,7 +1,9 @@
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/view/reports/report_detail_screen.dart';
+import 'package:avamovil/view/reports/report_qr_scanner_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 void main() {
   test('demo login authenticates the four configured accounts', () {
@@ -20,14 +22,18 @@ void main() {
     expect(data.authenticate('admin@ejemplo.cl', '1234'), isTrue);
     expect(data.currentUserTeamReports.length, data.reports.length);
     expect(data.canTriggerEmergencyAlert, isFalse);
+    expect(data.canScanReportQr, isFalse);
     expect(data.authenticate('analista@ejemplo.cl', '1234'), isTrue);
     expect(data.currentUserTeamReports.length, data.reports.length);
     expect(data.canTriggerEmergencyAlert, isFalse);
+    expect(data.canScanReportQr, isFalse);
     expect(data.authenticate('jfcua@ejemplo.cl', '1234'), isTrue);
     expect(data.currentUserTeamReports.length, data.reports.length);
     expect(data.canTriggerEmergencyAlert, isTrue);
+    expect(data.canScanReportQr, isTrue);
     expect(data.authenticate('trabajador@ejemplo.cl', '1234'), isTrue);
     expect(data.isWorker, isTrue);
+    expect(data.canScanReportQr, isFalse);
     expect(data.currentUserTeamReports, data.currentUserReports);
     expect(data.currentUserReports, isNotEmpty);
     expect(
@@ -228,6 +234,20 @@ void main() {
       ),
     );
     expect(find.byIcon(Icons.qr_code_2), findsNWidgets(2));
+  });
+
+  testWidgets('workers cannot open the QR scanner directly', (tester) async {
+    final data = DemoData.instance;
+    data.authenticate('trabajador@ejemplo.cl', '1234');
+
+    await tester.pumpWidget(const MaterialApp(home: ReportQrScannerScreen()));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Solo el supervisor puede escanear tarjetas PARE.'),
+      findsOneWidget,
+    );
+    expect(find.byType(MobileScanner), findsNothing);
   });
 
   test(
