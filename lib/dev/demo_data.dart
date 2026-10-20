@@ -27,10 +27,6 @@ class DemoData extends ChangeNotifier {
       },
     ]);
   }
-  if (remote['displayId'] is String) {
-    local['displayId'] = remote['displayId'];
-  }
-
   static final DemoData instance = DemoData._();
 
   static const List<String> conditions = [
@@ -592,6 +588,10 @@ class DemoData extends ChangeNotifier {
       }
     }
     local['activityLog'] = localActivity;
+
+    if (remote['displayId'] is String) {
+      local['displayId'] = remote['displayId'];
+    }
 
     if (remote['status'] == 'CERRADA') {
       local['status'] = 'CERRADA';
