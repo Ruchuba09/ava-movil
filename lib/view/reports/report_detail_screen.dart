@@ -141,10 +141,12 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Reporte cerrado correctamente')),
     );
+    final isOffline = widget.report['hasConnectionAtCreation'] == false;
     Navigator.of(context).pushReplacement<void, void>(
       MaterialPageRoute<void>(
-        builder: (context) =>
-            ReportQrScreen(report: widget.report, isNewReport: false),
+        builder: (context) => isOffline
+            ? ReportQrScreen(report: widget.report, isNewReport: false)
+            : ReportDetailScreen(report: widget.report, isLider: false),
       ),
     );
   }
@@ -159,14 +161,10 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     final reportEvidence = (widget.report['evidence'] as List<dynamic>? ?? [])
         .map((path) => path.toString())
         .toList();
-    final reportEvidenceCount =
-        widget.report['evidenceCount'] as int? ?? reportEvidence.length;
     final closeEvidence =
         (widget.report['closeEvidence'] as List<dynamic>? ?? [])
             .map((path) => path.toString())
             .toList();
-    final closeEvidenceCount =
-        widget.report['closeEvidenceCount'] as int? ?? closeEvidence.length;
     final activityLog =
         (widget.report['activityLog'] as List<dynamic>? ?? const [])
             .whereType<Map<String, dynamic>>()
@@ -175,19 +173,23 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Detalle de Evento ${widget.report['id']}'),
-        actions: [
-          IconButton(
-            tooltip: 'Mostrar QR para compartir la tarjeta',
-            icon: const Icon(Icons.qr_code_2),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) =>
-                    ReportQrScreen(report: widget.report, isNewReport: false),
-              ),
-            ),
-          ),
-        ],
+        actions: widget.report['hasConnectionAtCreation'] == false
+            ? [
+                IconButton(
+                  tooltip: 'Mostrar QR del reporte',
+                  icon: const Icon(Icons.qr_code_2),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ReportQrScreen(
+                        report: widget.report,
+                        isNewReport: false,
+                      ),
+                    ),
+                  ),
+                ),
+              ]
+            : null,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -195,7 +197,6 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Card(
-              color: isDark ? const Color(0xFF203A2C) : verde1Color,
               elevation: 2,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -266,13 +267,6 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(widget.report['description'].toString()),
-                    if (reportEvidenceCount > reportEvidence.length) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        '$reportEvidenceCount archivo(s) adjunto(s) no se transfirieron con el QR; están en el teléfono donde se crearon.',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
                     if (!isOpen &&
                         (widget.report['closeDescription'] as String)
                             .isNotEmpty) ...[
@@ -291,7 +285,6 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
             if (activityLog.isNotEmpty) ...[
               const SizedBox(height: 16),
               Card(
-                color: isDark ? const Color(0xFF203A2C) : verde1Color,
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -355,18 +348,10 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
             if (_showReportEvidence && reportEvidence.isNotEmpty) ...[
               const SizedBox(height: 8),
               Card(
-                color: isDark ? const Color(0xFF203A2C) : verde1Color,
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: _buildEvidenceGrid(reportEvidence),
                 ),
-              ),
-            ],
-            if (!isOpen && closeEvidenceCount > closeEvidence.length) ...[
-              const SizedBox(height: 16),
-              Text(
-                '$closeEvidenceCount archivo(s) de cierre no se transfirieron con el QR; están en el teléfono del supervisor.',
-                style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
             if (!isOpen && closeEvidence.isNotEmpty) ...[
@@ -378,21 +363,25 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
               const SizedBox(height: 8),
               _buildEvidenceGrid(closeEvidence),
             ],
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      ReportQrScreen(report: widget.report, isNewReport: false),
+            if (widget.report['hasConnectionAtCreation'] == false) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ReportQrScreen(
+                      report: widget.report,
+                      isNewReport: false,
+                    ),
+                  ),
+                ),
+                icon: const Icon(Icons.qr_code_2),
+                label: const Text('Mostrar QR del reporte'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
                 ),
               ),
-              icon: const Icon(Icons.qr_code_2),
-              label: const Text('Mostrar QR para compartir la tarjeta'),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-              ),
-            ),
+            ],
             const SizedBox(height: 24),
             if (isOpen && widget.isLider) ...[
               const Text(
@@ -401,7 +390,6 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
               ),
               const SizedBox(height: 16),
               Card(
-                color: isDark ? const Color(0xFF203A2C) : verde1Color,
                 elevation: 2,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),

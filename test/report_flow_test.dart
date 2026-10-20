@@ -1,4 +1,6 @@
 import 'package:avamovil/dev/demo_data.dart';
+import 'package:avamovil/view/reports/report_detail_screen.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -189,6 +191,44 @@ void main() {
       expect(data.reports.first['id'], isNot(workerReport['id']));
     },
   );
+
+  testWidgets('QR sharing is only shown for offline reports', (tester) async {
+    final data = DemoData.instance;
+    data.addReport(
+      project: DemoData.projects.first,
+      reference: 'Reporte con conexión',
+      condition: DemoData.conditions.first,
+      description: 'Reporte online',
+      evidence: const [],
+      isThirdParty: false,
+      hasConnection: true,
+    );
+    final onlineReport = data.reports.first;
+    data.addReport(
+      project: DemoData.projects.first,
+      reference: 'Reporte sin conexión',
+      condition: DemoData.conditions.first,
+      description: 'Reporte offline',
+      evidence: const [],
+      isThirdParty: false,
+      hasConnection: false,
+    );
+    final offlineReport = data.reports.first;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReportDetailScreen(report: onlineReport, isLider: false),
+      ),
+    );
+    expect(find.byIcon(Icons.qr_code_2), findsNothing);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReportDetailScreen(report: offlineReport, isLider: false),
+      ),
+    );
+    expect(find.byIcon(Icons.qr_code_2), findsNWidgets(2));
+  });
 
   test(
     'current user reports include cards assigned to the signed-in worker',

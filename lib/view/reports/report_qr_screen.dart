@@ -29,13 +29,13 @@ class ReportQrScreen extends StatelessWidget {
     final demoData = DemoData.instance;
     final canClose =
         report['status'] == 'ABIERTA' && demoData.canCloseReport(report);
-    final otherRole = demoData.isWorker ? 'tu supervisor' : 'el trabajador';
+    final hadConnection = report['hasConnectionAtCreation'] as bool? ?? false;
     final qrSize = (MediaQuery.sizeOf(context).width - 88)
         .clamp(180.0, 320.0)
         .toDouble();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Compartir Tarjeta PARE')),
+      appBar: AppBar(title: const Text('QR de cierre de flujo')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
         child: Align(
@@ -55,7 +55,7 @@ class ReportQrScreen extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        isNewReport ? 'Reporte guardado' : 'QR para compartir',
+                        isNewReport ? 'Reporte guardado' : 'QR del reporte',
                         style: const TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
@@ -66,7 +66,7 @@ class ReportQrScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  'MUESTRA ESTE QR A ${otherRole.toUpperCase()}',
+                  'ACÉRCATE A TU SUPERVISOR AHORA',
                   style: TextStyle(
                     color: isDark ? verde5Color : const Color(0xFF477600),
                     fontSize: 20,
@@ -76,7 +76,7 @@ class ReportQrScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Al escanearlo, la otra persona recibirá la tarjeta y su trazabilidad. Este intercambio funciona sin internet.',
+                  'Pídele que escanee este QR para iniciar el cierre del reporte. Si no está cerca, asegúrate de que venga cuanto antes.',
                   style: TextStyle(
                     color: isDark ? Colors.white : const Color(0xFF202428),
                     fontSize: 16,
@@ -88,21 +88,31 @@ class ReportQrScreen extends StatelessWidget {
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF203A2C)
-                        : const Color(0xFFE8F5D7),
+                    color: hadConnection
+                        ? (isDark
+                              ? const Color(0xFF203A2C)
+                              : const Color(0xFFE8F5D7))
+                        : (isDark
+                              ? const Color(0xFF432F2A)
+                              : const Color(0xFFFFE9E2)),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
                     children: [
                       Icon(
-                        Icons.sync_alt,
-                        color: isDark ? verde5Color : const Color(0xFF477600),
+                        hadConnection
+                            ? Icons.notifications_active
+                            : Icons.wifi_off,
+                        color: hadConnection
+                            ? (isDark ? verde5Color : const Color(0xFF477600))
+                            : const Color(0xFFC43D22),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'El QR transfiere los datos de la tarjeta, no los archivos adjuntos guardados en el otro teléfono.',
+                          hadConnection
+                              ? 'Se avisó a tu supervisor. Muéstrale este QR.'
+                              : 'Sin conexión: avisa a tu supervisor y muéstrale este QR.',
                           style: TextStyle(
                             color: isDark
                                 ? Colors.white
@@ -117,27 +127,28 @@ class ReportQrScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.16),
-                          blurRadius: 16,
-                          offset: const Offset(0, 5),
-                        ),
-                      ],
-                    ),
-                    child: QrImageView(
-                      data: _payload,
-                      version: QrVersions.auto,
-                      size: qrSize,
+                if (hadConnection == false)
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.16),
+                            blurRadius: 16,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                      ),
+                      child: QrImageView(
+                        data: _payload,
+                        version: QrVersions.auto,
+                        size: qrSize,
+                      ),
                     ),
                   ),
-                ),
                 const SizedBox(height: 14),
                 Text(
                   'Reporte ${report['id']} · ${report['reference']}',
