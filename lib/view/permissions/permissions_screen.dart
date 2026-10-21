@@ -314,7 +314,7 @@ class WorkerProfileScreen extends StatelessWidget {
                       ),
                     ),
                     title: Text(
-                      '${report['id']}  ${report['project']}',
+                      '${DemoData.instance.reportDisplayId(report)}  ${report['project']}',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontWeight: FontWeight.w600),

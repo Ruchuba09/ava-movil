@@ -17,35 +17,25 @@ class ReportQrScreen extends StatelessWidget {
   });
 
   String get _payload => jsonEncode({
-        'id': report['id'],
-        'project': report['project'],
-        'reference': report['reference'],
-        'condition': report['condition'],
-        'conditionText': report['conditionText'],
-        'description': report['description'],
-        'status': report['status'],
-        'createdAt': (report['createdAt'] ?? report['date']).toString(),
-        'hasConnectionAtCreation': report['hasConnectionAtCreation'],
-        'reporterId': report['reporterId'],
-        'reporter': report['reporter'],
-        'managerId': report['managerId'],
-        'manager': report['manager'],
-        'originalManager': report['originalManager'],
-        'action': 'close_report',
-      });
+    'version': 2,
+    'action': 'sync_report',
+    'id': report['id'],
+    'report': DemoData.instance.reportForQr(report),
+  });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final canClose = DemoData.instance.canCloseReport(report);
+    final demoData = DemoData.instance;
+    final canClose =
+        report['status'] == 'ABIERTA' && demoData.canCloseReport(report);
     final hadConnection = report['hasConnectionAtCreation'] as bool? ?? false;
-    final qrSize =
-        (MediaQuery.sizeOf(context).width - 88).clamp(180.0, 320.0).toDouble();
+    final qrSize = (MediaQuery.sizeOf(context).width - 88)
+        .clamp(180.0, 320.0)
+        .toDouble();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('QR de cierre de flujo'),
-      ),
+      appBar: AppBar(title: const Text('QR de cierre de flujo')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
         child: Align(
@@ -57,14 +47,19 @@ class ReportQrScreen extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.check_circle,
-                        color: successColor, size: 32),
+                    const Icon(
+                      Icons.check_circle,
+                      color: successColor,
+                      size: 32,
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         isNewReport ? 'Reporte guardado' : 'QR del reporte',
                         style: const TextStyle(
-                            fontSize: 24, fontWeight: FontWeight.bold),
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],
@@ -95,11 +90,11 @@ class ReportQrScreen extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: hadConnection
                         ? (isDark
-                            ? const Color(0xFF203A2C)
-                            : const Color(0xFFE8F5D7))
+                              ? const Color(0xFF203A2C)
+                              : const Color(0xFFE8F5D7))
                         : (isDark
-                            ? const Color(0xFF432F2A)
-                            : const Color(0xFFFFE9E2)),
+                              ? const Color(0xFF432F2A)
+                              : const Color(0xFFFFE9E2)),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
@@ -119,8 +114,9 @@ class ReportQrScreen extends StatelessWidget {
                               ? 'Se avisó a tu supervisor. Muéstrale este QR.'
                               : 'Sin conexión: avisa a tu supervisor y muéstrale este QR.',
                           style: TextStyle(
-                            color:
-                                isDark ? Colors.white : const Color(0xFF202428),
+                            color: isDark
+                                ? Colors.white
+                                : const Color(0xFF202428),
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
                             height: 1.3,
@@ -154,7 +150,7 @@ class ReportQrScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  'Reporte ${report['id']} · ${report['reference']}',
+                  'Reporte ${demoData.reportDisplayId(report)} · ${report['reference']}',
                   style: TextStyle(
                     color: isDark ? Colors.grey[300] : Colors.grey[700],
                     fontSize: 14,
@@ -167,10 +163,8 @@ class ReportQrScreen extends StatelessWidget {
                     onPressed: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => ReportDetailScreen(
-                          report: report,
-                          isLider: true,
-                        ),
+                        builder: (context) =>
+                            ReportDetailScreen(report: report, isLider: true),
                       ),
                     ),
                     icon: const Icon(Icons.lock_open_rounded),
@@ -180,7 +174,9 @@ class ReportQrScreen extends StatelessWidget {
                       foregroundColor: Colors.white,
                       minimumSize: const Size.fromHeight(52),
                       textStyle: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.bold),
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 const SizedBox(height: 10),

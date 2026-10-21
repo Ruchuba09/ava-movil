@@ -5,6 +5,7 @@ import 'package:google_nav_bar/google_nav_bar.dart';
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/auth/login_screen.dart';
+import 'package:avamovil/view/reports/camera_access.dart';
 import 'package:avamovil/view/reports/reports_screen.dart';
 import 'package:avamovil/view/reports/new_report_screen.dart';
 import 'package:avamovil/view/reports/report_detail_screen.dart';
@@ -64,22 +65,25 @@ class _HomeScreenState extends State<HomeScreen> {
                         isEmergency
                             ? Icons.sos
                             : notification['read'] == true
-                                ? Icons.notifications_none
-                                : Icons.notifications_active,
+                            ? Icons.notifications_none
+                            : Icons.notifications_active,
                         color: isEmergency ? Colors.red : verde6Color,
                       ),
                       title: Text(
                         notification['title'] as String,
                         style: TextStyle(
                           color: isEmergency ? Colors.red.shade800 : null,
-                          fontWeight:
-                              isEmergency ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: isEmergency
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                         ),
                       ),
                       subtitle: Text(notification['message'] as String),
                       trailing: isEmergency
-                          ? Icon(Icons.warning_amber_rounded,
-                              color: Colors.red.shade700)
+                          ? Icon(
+                              Icons.warning_amber_rounded,
+                              color: Colors.red.shade700,
+                            )
                           : null,
                       onTap: () {
                         demoData.markNotificationRead(notification);
@@ -87,13 +91,15 @@ class _HomeScreenState extends State<HomeScreen> {
                             notification['emergencyAlertId'];
                         if (emergencyAlertId != null) {
                           final alert = demoData.emergencyAlerts.firstWhere(
-                              (item) => item['id'] == emergencyAlertId);
+                            (item) => item['id'] == emergencyAlertId,
+                          );
                           Navigator.pop(dialogContext);
                           _showEmergencyAlertDetails(alert);
                           return;
                         }
                         final report = demoData.reports.firstWhere(
-                            (item) => item['id'] == notification['reportId']);
+                          (item) => item['id'] == notification['reportId'],
+                        );
                         Navigator.pop(dialogContext);
                         setState(() => _selectedIndex = 1);
                         Navigator.push(
@@ -121,8 +127,9 @@ class _HomeScreenState extends State<HomeScreen> {
               label: const Text('Eliminar leídas'),
             ),
           TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cerrar'))
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cerrar'),
+          ),
         ],
       ),
     );
@@ -145,8 +152,10 @@ class _HomeScreenState extends State<HomeScreen> {
               Text('Encargado: ${alert['recipient']}'),
               Text('Estado: ${alert['status']}'),
               const SizedBox(height: 16),
-              const Text('Trazabilidad',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text(
+                'Trazabilidad',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 8),
               ...events.map((event) {
                 final at = event['at'] as DateTime;
@@ -181,9 +190,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     } on StateError catch (error) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     }
   }
 
@@ -191,6 +200,17 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (context) => const LoginScreen()),
       (route) => false,
+    );
+  }
+
+  Future<void> _scanReportQr() async {
+    if (!DemoData.instance.canScanReportQr) return;
+    if (!await ensureCameraPermission(context) || !mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (context) => const ReportQrScannerScreen(),
+      ),
     );
   }
 
@@ -235,13 +255,16 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Image.asset(
-              'assets/logos/negro.png',
-              color: isDark ? verde5Color : Colors.black,
-              colorBlendMode: BlendMode.srcIn,
-              width: 80,
-              height: 30,
-              fit: BoxFit.contain,
+            Padding(
+              padding: EdgeInsets.only(left: isWorker ? 16 : 0),
+              child: Image.asset(
+                'assets/logos/negro.png',
+                color: isDark ? verde5Color : Colors.black,
+                colorBlendMode: BlendMode.srcIn,
+                width: 80,
+                height: 30,
+                fit: BoxFit.contain,
+              ),
             ),
             const SizedBox(width: 10),
             if (demoData.canTriggerEmergencyAlert)
@@ -255,16 +278,20 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (!isWorker)
+                if (demoData.canScanReportQr)
                   IconButton(
                     tooltip: 'Escanear QR de Tarjeta PARE',
                     icon: const Icon(Icons.qr_code_scanner),
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute<void>(
-                        builder: (context) => const ReportQrScannerScreen(),
-                      ),
-                    ),
+                    onPressed: _scanReportQr,
+                  ),
+                if (isWorker)
+                  IconButton(
+                    tooltip: isDark
+                        ? 'Cambiar a modo claro'
+                        : 'Cambiar a modo oscuro',
+                    icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
+                    onPressed: () =>
+                        context.read<ThemeController>().toggleTheme(!isDark),
                   ),
                 if (!isWorker)
                   AnimatedBuilder(
@@ -292,23 +319,32 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(currentUser['name'] as String,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold)),
-                            Text(currentUser['email'] as String,
-                                style: Theme.of(context).textTheme.bodySmall),
-                            Text(currentUser['role'] as String,
-                                style: Theme.of(context).textTheme.labelSmall),
+                            Text(
+                              currentUser['name'] as String,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              currentUser['email'] as String,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            Text(
+                              currentUser['role'] as String,
+                              style: Theme.of(context).textTheme.labelSmall,
+                            ),
                           ],
                         ),
                       ),
                     ),
                     const PopupMenuDivider(),
                     const PopupMenuItem(
-                        value: 'logout',
-                        child: ListTile(
-                            leading: Icon(Icons.logout),
-                            title: Text('Cerrar sesión'))),
+                      value: 'logout',
+                      child: ListTile(
+                        leading: Icon(Icons.logout),
+                        title: Text('Cerrar sesión'),
+                      ),
+                    ),
                   ],
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -316,9 +352,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       radius: 14,
                       backgroundColor: verde5Color,
                       child: Text(
-                          (currentUser['name'] as String).substring(0, 1),
-                          style: const TextStyle(
-                              color: Colors.black, fontSize: 12)),
+                        (currentUser['name'] as String).substring(0, 1),
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -358,8 +397,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                   Text(
                                     currentUser['name'] as String,
                                     style: TextStyle(
-                                      color:
-                                          isDark ? Colors.white : Colors.black,
+                                      color: isDark
+                                          ? Colors.white
+                                          : Colors.black,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 18,
                                     ),
@@ -373,12 +413,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                       fontSize: 14,
                                     ),
                                   ),
-                                  Text(currentUser['role'] as String,
-                                      style: TextStyle(
-                                          color: isDark
-                                              ? Colors.white70
-                                              : Colors.black54,
-                                          fontSize: 12)),
+                                  Text(
+                                    currentUser['role'] as String,
+                                    style: TextStyle(
+                                      color: isDark
+                                          ? Colors.white70
+                                          : Colors.black54,
+                                      fontSize: 12,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ],
@@ -411,11 +454,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         ExpansionTile(
                           leading: const Icon(Icons.people_outline),
                           title: Text(
-                              'Visualización y equipo (${workers.length})'),
+                            'Visualización y equipo (${workers.length})',
+                          ),
                           children: [
                             ListTile(
-                              contentPadding:
-                                  const EdgeInsets.only(left: 56, right: 16),
+                              contentPadding: const EdgeInsets.only(
+                                left: 56,
+                                right: 16,
+                              ),
                               leading: const Icon(Icons.visibility_outlined),
                               title: const Text('Visualización de cuadrilla'),
                               onTap: () {
@@ -423,25 +469,31 @@ class _HomeScreenState extends State<HomeScreen> {
                                 setState(() => _showPermissions = true);
                               },
                             ),
-                            ...workers.map((worker) => ListTile(
-                                  dense: true,
-                                  contentPadding: const EdgeInsets.only(
-                                      left: 56, right: 16),
-                                  leading: const Icon(Icons.person_outline,
-                                      size: 18),
-                                  title: Text(worker['name'] as String),
-                                  subtitle: Text(worker['role'] as String),
-                                  onTap: () {
-                                    Navigator.pop(context);
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            WorkerProfileScreen(worker: worker),
-                                      ),
-                                    );
-                                  },
-                                )),
+                            ...workers.map(
+                              (worker) => ListTile(
+                                dense: true,
+                                contentPadding: const EdgeInsets.only(
+                                  left: 56,
+                                  right: 16,
+                                ),
+                                leading: const Icon(
+                                  Icons.person_outline,
+                                  size: 18,
+                                ),
+                                title: Text(worker['name'] as String),
+                                subtitle: Text(worker['role'] as String),
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          WorkerProfileScreen(worker: worker),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -455,8 +507,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         Consumer<ThemeController>(
                           builder: (context, themeController, child) {
-                            final darkMode = themeController.themeMode ==
-                                    ThemeMode.dark ||
+                            final darkMode =
+                                themeController.themeMode == ThemeMode.dark ||
                                 (themeController.themeMode ==
                                         ThemeMode.system &&
                                     MediaQuery.of(context).platformBrightness ==
@@ -491,7 +543,7 @@ class _HomeScreenState extends State<HomeScreen> {
             BoxShadow(
               blurRadius: 20,
               color: Colors.black.withValues(alpha: .1),
-            )
+            ),
           ],
         ),
         child: SafeArea(
@@ -574,64 +626,65 @@ class _EmergencyHoldButtonState extends State<_EmergencyHoldButton>
 
   @override
   Widget build(BuildContext context) => Tooltip(
-        message: 'Mantén presionado 3 segundos para avisar a tu encargado',
-        child: Semantics(
-          label:
-              'SOS. Mantén presionado tres segundos para avisar a tu encargado',
-          button: true,
-          child: Listener(
-            onPointerDown: _startHold,
-            onPointerUp: _cancelHold,
-            onPointerCancel: _cancelHold,
-            child: SizedBox(
-              width: 76,
-              height: 48,
-              child: AnimatedBuilder(
-                animation: _holdController,
-                builder: (context, child) => Stack(
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).scaffoldBackgroundColor,
-                        borderRadius: BorderRadius.circular(22),
-                        border: Border.all(
-                          color: const Color(0xFFC62828),
-                          width: 2,
-                        ),
-                      ),
-                      child: const Center(
-                        child: Text(
-                          'SOS',
-                          style: TextStyle(
-                            color: Color(0xFFC62828),
-                            fontWeight: FontWeight.w800,
-                            fontSize: 14,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
+    message: 'Mantén presionado 3 segundos para avisar a tu encargado',
+    child: Semantics(
+      label: 'SOS. Mantén presionado tres segundos para avisar a tu encargado',
+      button: true,
+      child: Listener(
+        onPointerDown: _startHold,
+        onPointerUp: _cancelHold,
+        onPointerCancel: _cancelHold,
+        child: SizedBox(
+          width: 76,
+          height: 48,
+          child: AnimatedBuilder(
+            animation: _holdController,
+            builder: (context, child) => Stack(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).scaffoldBackgroundColor,
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(
+                      color: const Color(0xFFC62828),
+                      width: 2,
+                    ),
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'SOS',
+                      style: TextStyle(
+                        color: Color(0xFFC62828),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                        letterSpacing: 0.5,
                       ),
                     ),
-                    Positioned(
-                      left: 8,
-                      right: 8,
-                      bottom: 4,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(2),
-                        child: LinearProgressIndicator(
-                          value: _holdController.value,
-                          minHeight: 3,
-                          backgroundColor:
-                              const Color(0xFFC62828).withValues(alpha: 0.15),
-                          valueColor: const AlwaysStoppedAnimation<Color>(
-                              Color(0xFFC62828)),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+                Positioned(
+                  left: 8,
+                  right: 8,
+                  bottom: 4,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: LinearProgressIndicator(
+                      value: _holdController.value,
+                      minHeight: 3,
+                      backgroundColor: const Color(
+                        0xFFC62828,
+                      ).withValues(alpha: 0.15),
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        Color(0xFFC62828),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
-      );
+      ),
+    ),
+  );
 }
