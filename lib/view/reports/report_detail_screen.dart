@@ -175,23 +175,19 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         title: Text(
           'Detalle de Evento ${DemoData.instance.reportDisplayId(widget.report)}',
         ),
-        actions: widget.report['hasConnectionAtCreation'] == false
-            ? [
-                IconButton(
-                  tooltip: 'Mostrar QR del reporte',
-                  icon: const Icon(Icons.qr_code_2),
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ReportQrScreen(
-                        report: widget.report,
-                        isNewReport: false,
-                      ),
-                    ),
-                  ),
-                ),
-              ]
-            : null,
+        actions: [
+          IconButton(
+            tooltip: 'Mostrar QR del reporte',
+            icon: const Icon(Icons.qr_code_2),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) =>
+                    ReportQrScreen(report: widget.report, isNewReport: false),
+              ),
+            ),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -365,25 +361,21 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
               const SizedBox(height: 8),
               _buildEvidenceGrid(closeEvidence),
             ],
-            if (widget.report['hasConnectionAtCreation'] == false) ...[
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ReportQrScreen(
-                      report: widget.report,
-                      isNewReport: false,
-                    ),
-                  ),
-                ),
-                icon: const Icon(Icons.qr_code_2),
-                label: const Text('Mostrar QR del reporte'),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      ReportQrScreen(report: widget.report, isNewReport: false),
                 ),
               ),
-            ],
+              icon: const Icon(Icons.qr_code_2),
+              label: const Text('Mostrar QR del reporte'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+            ),
             const SizedBox(height: 24),
             if (isOpen && widget.isLider) ...[
               const Text(

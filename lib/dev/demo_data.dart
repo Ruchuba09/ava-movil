@@ -834,7 +834,7 @@ class DemoData extends ChangeNotifier {
 
   void _seedReports() {
     final seedDate = DateTime(2026, 10, 8);
-    for (var index = 0; index < 48; index++) {
+    for (var index = 0; index < 72; index++) {
       final projectIndex = index % projects.length;
       final conditionIndex = index % conditions.length;
       final project = projects[projectIndex];
@@ -857,7 +857,7 @@ class DemoData extends ChangeNotifier {
           ? 'Carlos Gómez'
           : workers.firstWhere((worker) => worker['id'] == reporterId)['name']
                 as String;
-      final subjectId = index == 0 || index == 2
+      final subjectId = index == 0 || index == 2 || index % 6 == 0
           ? 1
           : (index == 1 ? 21 : reporterId);
       final subject = subjectId == 1

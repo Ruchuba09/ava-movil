@@ -127,28 +127,27 @@ class ReportQrScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                if (hadConnection == false)
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.16),
-                            blurRadius: 16,
-                            offset: const Offset(0, 5),
-                          ),
-                        ],
-                      ),
-                      child: QrImageView(
-                        data: _payload,
-                        version: QrVersions.auto,
-                        size: qrSize,
-                      ),
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.16),
+                          blurRadius: 16,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: QrImageView(
+                      data: _payload,
+                      version: QrVersions.auto,
+                      size: qrSize,
                     ),
                   ),
+                ),
                 const SizedBox(height: 14),
                 Text(
                   'Reporte ${demoData.reportDisplayId(report)} · ${report['reference']}',

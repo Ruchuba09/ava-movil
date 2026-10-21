@@ -4,6 +4,7 @@ import 'package:avamovil/view/reports/report_qr_scanner_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 void main() {
   test('demo login authenticates the four configured accounts', () {
@@ -198,15 +199,15 @@ void main() {
       );
       expect(data.reports.first['id'], isNot(workerReport['id']));
       expect(
-        int.parse(
-              (data.reports.first['displayId'] as String).substring(1),
-            ),
+        int.parse((data.reports.first['displayId'] as String).substring(1)),
         int.parse((workerReport['displayId'] as String).substring(1)) + 1,
       );
     },
   );
 
-  testWidgets('QR sharing is only shown for offline reports', (tester) async {
+  testWidgets('QR sharing is shown for online and offline reports', (
+    tester,
+  ) async {
     final data = DemoData.instance;
     data.addReport(
       project: DemoData.projects.first,
@@ -234,7 +235,13 @@ void main() {
         home: ReportDetailScreen(report: onlineReport, isLider: false),
       ),
     );
-    expect(find.byIcon(Icons.qr_code_2), findsNothing);
+    expect(find.byIcon(Icons.qr_code_2), findsNWidgets(2));
+    await tester.tap(find.byTooltip('Mostrar QR del reporte'));
+    await tester.pumpAndSettle();
+    expect(find.byType(QrImageView), findsOneWidget);
+    expect(find.text('QR del reporte'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
 
     await tester.pumpWidget(
       MaterialApp(
@@ -242,6 +249,9 @@ void main() {
       ),
     );
     expect(find.byIcon(Icons.qr_code_2), findsNWidgets(2));
+    await tester.tap(find.byTooltip('Mostrar QR del reporte'));
+    await tester.pumpAndSettle();
+    expect(find.byType(QrImageView), findsOneWidget);
   });
 
   testWidgets('workers cannot open the QR scanner directly', (tester) async {
@@ -280,6 +290,8 @@ void main() {
       reports.map((report) => report['id']),
       containsAll(['#200', '#199', '#198']),
     );
+    expect(data.reports.length, greaterThanOrEqualTo(72));
+    expect(reports.length, greaterThanOrEqualTo(12));
     expect(
       reports.firstWhere((report) => report['id'] == '#199')['isThirdParty'],
       isTrue,

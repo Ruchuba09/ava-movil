@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/reports/camera_access.dart';
-import 'package:avamovil/view/reports/report_detail_screen.dart';
 import 'package:avamovil/view/reports/report_qr_screen.dart';
 import 'package:avamovil/view/widgets/selection_field.dart';
 import 'package:image_picker/image_picker.dart';
@@ -139,14 +138,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
     setState(() => _isSubmitting = false);
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => hasSignal
-            ? ReportDetailScreen(
-                report: report,
-                isLider: demoData.canCloseReport(report),
-              )
-            : ReportQrScreen(report: report),
-      ),
+      MaterialPageRoute(builder: (context) => ReportQrScreen(report: report)),
     );
   }
 
