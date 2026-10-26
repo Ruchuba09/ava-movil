@@ -30,6 +30,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   final TextEditingController _descController = TextEditingController();
   final List<String> _evidence = [];
   bool _showReportEvidence = false;
+  bool _showActivityLog = false;
 
   @override
   void initState() {
@@ -280,78 +281,6 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                 ),
               ),
             ),
-            if (activityLog.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Registro de actividad',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const Divider(),
-                      ...activityLog.map((activity) {
-                        final at = activity['at'];
-                        return ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(
-                            activity['type'] == 'closed'
-                                ? Icons.task_alt
-                                : activity['type'] == 'connection'
-                                ? Icons.wifi
-                                : activity['type'] == 'qr_scanned'
-                                ? Icons.qr_code_scanner
-                                : Icons.assignment_outlined,
-                            color: activity['type'] == 'closed'
-                                ? Colors.cyan
-                                : verde6Color,
-                          ),
-                          title: Text(activity['description'].toString()),
-                          subtitle: at is DateTime
-                              ? Text(_formatDateTime(at))
-                              : null,
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-            const SizedBox(height: 24),
-            OutlinedButton.icon(
-              onPressed: reportEvidence.isEmpty
-                  ? null
-                  : () => setState(
-                      () => _showReportEvidence = !_showReportEvidence,
-                    ),
-              icon: Icon(
-                _showReportEvidence
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
-              ),
-              label: Text(
-                '${_showReportEvidence ? 'Ocultar' : 'Mostrar'} evidencia del reporte (${reportEvidence.length})',
-              ),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-              ),
-            ),
-            if (_showReportEvidence && reportEvidence.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: _buildEvidenceGrid(reportEvidence),
-                ),
-              ),
-            ],
             if (!isOpen && closeEvidence.isNotEmpty) ...[
               const SizedBox(height: 16),
               const Text(
@@ -361,23 +290,8 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
               const SizedBox(height: 8),
               _buildEvidenceGrid(closeEvidence),
             ],
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      ReportQrScreen(report: widget.report, isNewReport: false),
-                ),
-              ),
-              icon: const Icon(Icons.qr_code_2),
-              label: const Text('Mostrar QR del reporte'),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-              ),
-            ),
-            const SizedBox(height: 24),
             if (isOpen && widget.isLider) ...[
+              const SizedBox(height: 24),
               const Text(
                 'Cierre de Reporte',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -446,6 +360,112 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                 ),
               ),
             ],
+            const SizedBox(height: 24),
+            if (activityLog.isNotEmpty) ...[
+              OutlinedButton.icon(
+                onPressed: () => setState(
+                  () => _showActivityLog = !_showActivityLog,
+                ),
+                icon: Icon(
+                  _showActivityLog
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                ),
+                label: Text(
+                  '${_showActivityLog ? 'Ocultar' : 'Mostrar'} registro de actividad',
+                ),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                ),
+              ),
+              if (_showActivityLog) ...[
+                const SizedBox(height: 8),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Registro de actividad',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Divider(),
+                        ...activityLog.map((activity) {
+                          final at = activity['at'];
+                          return ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(
+                              activity['type'] == 'closed'
+                                  ? Icons.task_alt
+                                  : activity['type'] == 'connection'
+                                  ? Icons.wifi
+                                  : activity['type'] == 'qr_scanned'
+                                  ? Icons.qr_code_scanner
+                                  : Icons.assignment_outlined,
+                              color: activity['type'] == 'closed'
+                                  ? Colors.cyan
+                                  : verde6Color,
+                            ),
+                            title: Text(activity['description'].toString()),
+                            subtitle: at is DateTime
+                                ? Text(_formatDateTime(at))
+                                : null,
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+            ],
+            OutlinedButton.icon(
+              onPressed: reportEvidence.isEmpty
+                  ? null
+                  : () => setState(
+                      () => _showReportEvidence = !_showReportEvidence,
+                    ),
+              icon: Icon(
+                _showReportEvidence
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+              ),
+              label: Text(
+                '${_showReportEvidence ? 'Ocultar' : 'Mostrar'} evidencia del reporte (${reportEvidence.length})',
+              ),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+            ),
+            if (_showReportEvidence && reportEvidence.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: _buildEvidenceGrid(reportEvidence),
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      ReportQrScreen(report: widget.report, isNewReport: false),
+                ),
+              ),
+              icon: const Icon(Icons.qr_code_2),
+              label: const Text('Mostrar QR del reporte'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+            ),
           ],
         ),
       ),

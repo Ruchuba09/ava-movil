@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:google_nav_bar/google_nav_bar.dart';
 import 'package:avamovil/dev/demo_data.dart';
@@ -179,23 +178,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _triggerEmergencyAlert() {
-    try {
-      final alert = DemoData.instance.triggerEmergencyAlert();
-      HapticFeedback.heavyImpact();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Alerta registrada para ${alert['recipient']}.'),
-          backgroundColor: Colors.red.shade800,
-        ),
-      );
-    } on StateError catch (error) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
-    }
-  }
-
   void _signOut() {
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (context) => const LoginScreen()),
@@ -266,9 +248,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 fit: BoxFit.contain,
               ),
             ),
-            const SizedBox(width: 10),
-            if (demoData.canTriggerEmergencyAlert)
-              _EmergencyHoldButton(onTriggered: _triggerEmergencyAlert),
           ],
         ),
         actions: [
@@ -573,118 +552,4 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-}
-
-class _EmergencyHoldButton extends StatefulWidget {
-  final VoidCallback onTriggered;
-
-  const _EmergencyHoldButton({required this.onTriggered});
-
-  @override
-  State<_EmergencyHoldButton> createState() => _EmergencyHoldButtonState();
-}
-
-class _EmergencyHoldButtonState extends State<_EmergencyHoldButton>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _holdController;
-  bool _isHolding = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _holdController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 3),
-    )..addStatusListener(_onHoldStatusChanged);
-  }
-
-  void _onHoldStatusChanged(AnimationStatus status) {
-    if (status != AnimationStatus.completed || !_isHolding) return;
-    _isHolding = false;
-    widget.onTriggered();
-    _holdController.value = 0;
-  }
-
-  void _startHold(PointerDownEvent _) {
-    if (_isHolding) return;
-    _isHolding = true;
-    _holdController.forward(from: 0);
-  }
-
-  void _cancelHold(PointerEvent _) {
-    if (!_isHolding) return;
-    _isHolding = false;
-    _holdController.stop();
-    _holdController.value = 0;
-  }
-
-  @override
-  void dispose() {
-    _holdController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => Tooltip(
-    message: 'Mantén presionado 3 segundos para avisar a tu encargado',
-    child: Semantics(
-      label: 'SOS. Mantén presionado tres segundos para avisar a tu encargado',
-      button: true,
-      child: Listener(
-        onPointerDown: _startHold,
-        onPointerUp: _cancelHold,
-        onPointerCancel: _cancelHold,
-        child: SizedBox(
-          width: 76,
-          height: 48,
-          child: AnimatedBuilder(
-            animation: _holdController,
-            builder: (context, child) => Stack(
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).scaffoldBackgroundColor,
-                    borderRadius: BorderRadius.circular(22),
-                    border: Border.all(
-                      color: const Color(0xFFC62828),
-                      width: 2,
-                    ),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'SOS',
-                      style: TextStyle(
-                        color: Color(0xFFC62828),
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: 8,
-                  right: 8,
-                  bottom: 4,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(2),
-                    child: LinearProgressIndicator(
-                      value: _holdController.value,
-                      minHeight: 3,
-                      backgroundColor: const Color(
-                        0xFFC62828,
-                      ).withValues(alpha: 0.15),
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                        Color(0xFFC62828),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
 }
