@@ -501,11 +501,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             );
                           },
                         ),
-                        ListTile(
-                          leading: const Icon(Icons.logout),
-                          title: const Text('Cerrar sesión'),
-                          onTap: _signOut,
-                        ),
                       ],
                     ),
                   ),
