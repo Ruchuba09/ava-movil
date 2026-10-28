@@ -39,7 +39,7 @@ class DemoData extends ChangeNotifier {
     '07. NO contar con AST, VATS, ERT.',
     '08. NO contar con el o los permisos exigidos para realizar la actividad.',
     '09. NO encontrarse en condiciones físicas o emocionales para realizar la actividad.',
-    '10. Otras condiciones no consideradas que impliquen un riesgo no controlado.',
+    '10. NO cumplir con estándar Crítico AVA y del cliente.',
   ];
 
   static const List<String> projects = [
