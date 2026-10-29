@@ -2,8 +2,8 @@
 
 ## Entorno de desarrollo
 
-Flutter 3.41.6
-Dart 3.11.4
+Flutter 3.44 o superior
+Dart 3.12 o superior
 DevTools 2.54.2
 
 ---
@@ -127,7 +127,6 @@ flutter clean
 
 ### Archivos de configuración
 
-- `.env` → Variables de entorno (opcional)
 - `pubspec.yaml` → Dependencias y configuración del proyecto
 - `pubspec.lock` → Versiones exactas de dependencias
 
@@ -140,6 +139,16 @@ flutter clean
   - Desinstalar e instalar la app
   - Manejar versionamiento de base de datos (`onUpgrade`)
 - Evitar duplicar lógica → usar `utils/` o funciones reutilizables
+
+### Base local y sincronización
+
+- SQLite es la persistencia local de la app; la web se conectará al servidor mediante la API, no al archivo SQLite del dispositivo.
+- La tabla `sincronizacion` funciona como cola de salida: las escrituras locales y su entrada de sincronización deben guardarse dentro de la misma transacción.
+- Los cambios de esquema requieren incrementar `AvaMovilDatabase.version` y agregar una migración aditiva en `onUpgrade`; no borrar la base de datos de usuarios para aplicar cambios.
+- `SyncQueue` registra cambios y reintentos; el servicio que los envíe a la API y resuelva conflictos se implementará cuando se defina el contrato.
+- No incluir contraseñas, tokens ni otros secretos en las cargas de la cola.
+- La URL base se inyecta al ejecutar/compilar, por ejemplo `flutter run --dart-define=API_BASE_URL=https://api.example.com/api/`. En producción solo se acepta HTTPS.
+- La app móvil es un cliente público: no guardar claves compartidas del servidor ni secretos de API dentro de ella. La autenticación debe entregar credenciales/tokens de usuario según el contrato del backend.
 
 ---
 
@@ -237,7 +246,3 @@ flutter clean
 - `intl` → Formato de fechas, números, etc.
 - `flutter_cache_manager` → Manejo de caché de archivos
 - `mobile_scanner` → Escaneo de códigos QR
-
-### Configuración
-
-- `flutter_dotenv` → Manejo de variables de entorno (.env)

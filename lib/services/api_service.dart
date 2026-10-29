@@ -14,9 +14,7 @@ class ApiException implements Exception {
   });
 
   @override
-  String toString() {
-    return 'ApiException($statusCode): $message';
-  }
+  String toString() => 'ApiException($statusCode): $message';
 }
 
 class ApiService {
@@ -77,7 +75,9 @@ class ApiService {
 
     if (configuredUrl.isEmpty) {
       throw StateError(
-        'API_BASE_URL no está configurada.',
+        'API_BASE_URL no está configurada. '
+        'Inicia la aplicación con '
+        '--dart-define=API_BASE_URL=https://servidor/api/v1/',
       );
     }
 
@@ -97,7 +97,8 @@ class ApiService {
       throw ArgumentError.value(
         _baseUrl,
         'baseUrl',
-        'La URL debe ser HTTP(S) y válida.',
+        'Debe ser una URL HTTP(S) sin credenciales, '
+        'query ni fragmento.',
       );
     }
 

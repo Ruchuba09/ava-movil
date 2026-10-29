@@ -1,13 +1,14 @@
 
 import 'dart:convert';
 
+import 'package:avamovil/services/api_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import '../lib/services/api_service.dart';
 
 void main() {
   group('Pruebas de ApiService', () {
+
     test('Obtiene proyectos desde Laravel', () async {
       final clienteSimulado = MockClient((request) async {
         expect(request.method, 'GET');
@@ -57,18 +58,13 @@ void main() {
     });
 
     test('Detecta errores de autenticación', () async {
-      final clienteSimulado = MockClient((request) async {
-        return http.Response(
-          '{"message":"Unauthenticated."}',
-          401,
-          headers: {
-            'content-type': 'application/json',
-          },
-        );
-      });
-
       final servicio = ApiService(
-        client: clienteSimulado,
+        client: MockClient(
+          (_) async => http.Response(
+            '{"message":"Unauthenticated."}',
+            401,
+          ),
+        ),
         baseUrl: 'https://ejemplo.cl/api/v1/',
         accessToken: 'token_prueba',
       );
@@ -88,5 +84,109 @@ void main() {
         servicio.close();
       }
     });
+
+    test('Construye correctamente la URL de proyectos', () async {
+      late Uri requestedUri;
+
+      final client = MockClient((request) async {
+        requestedUri = request.url;
+
+        expect(
+          request.headers['Accept'],
+          'application/json',
+        );
+
+        return http.Response(jsonEncode([]), 200);
+      });
+
+      final service = ApiService(
+        client: client,
+        baseUrl: 'https://example.test/v1/api',
+      );
+
+      try {
+        expect(await service.obtenerProyectos(), isEmpty);
+
+        expect(
+          requestedUri,
+          Uri.https('example.test', '/v1/api/proyectos'),
+        );
+      } finally {
+        service.close();
+      }
+    });
+
+    test('Muestra el mensaje de error de Laravel', () async {
+      final service = ApiService(
+        client: MockClient(
+          (_) async => http.Response(
+            jsonEncode({'message': 'No autorizado'}),
+            401,
+          ),
+        ),
+        baseUrl: 'https://example.test/api',
+      );
+
+      try {
+        await expectLater(
+          service.obtenerProyectos(),
+          throwsA(
+            isA<ApiException>()
+                .having(
+                  (error) => error.statusCode,
+                  'statusCode',
+                  401,
+                )
+                .having(
+                  (error) => error.message,
+                  'message',
+                  'No autorizado',
+                ),
+          ),
+        );
+      } finally {
+        service.close();
+      }
+    });
+
+    test('Rechaza una estructura JSON inesperada', () async {
+      final service = ApiService(
+        client: MockClient(
+          (_) async => http.Response(
+            jsonEncode({'data': []}),
+            200,
+          ),
+        ),
+        baseUrl: 'https://example.test/api',
+      );
+
+      try {
+        await expectLater(
+          service.obtenerProyectos(),
+          throwsFormatException,
+        );
+      } finally {
+        service.close();
+      }
+    });
+
+    test('Detecta cuando falta la URL de la API', () async {
+      final service = ApiService(
+        client: MockClient(
+          (_) async => http.Response('[]', 200),
+        ),
+        baseUrl: '',
+      );
+
+      try {
+        await expectLater(
+          service.obtenerProyectos(),
+          throwsStateError,
+        );
+      } finally {
+        service.close();
+      }
+    });
+
   });
 }

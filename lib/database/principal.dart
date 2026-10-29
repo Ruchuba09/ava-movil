@@ -523,9 +523,17 @@ CREATE TABLE sincronizacion (
 
   operacion TEXT NOT NULL,
 
-  estado TEXT NOT NULL DEFAULT 'pendiente',
+  estado TEXT NOT NULL DEFAULT 'pendiente'
+    CHECK (estado IN ('pendiente', 'error', 'sincronizado')),
+
+  payload_json TEXT,
+
+  intentos INTEGER NOT NULL DEFAULT 0
+    CHECK (intentos >= 0),
 
   fecha_creacion TEXT NOT NULL,
+
+  fecha_actualizacion TEXT,
 
   fecha_sincronizacion TEXT,
 

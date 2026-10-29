@@ -8,7 +8,8 @@ class AvaMovilDatabase {
 
   static Database? _database;
 
-  static const int version = 1;
+  static const int version = 2;
+  static const String _databaseName = 'avamovil.db';
 
   AvaMovilDatabase._init();
 
@@ -18,7 +19,7 @@ class AvaMovilDatabase {
     }
 
     _database =
-        await _initDB('avamovil.db');
+        await _initDB(_databaseName);
 
     return _database!;
   }
@@ -195,6 +196,20 @@ class AvaMovilDatabase {
       idx_evidencias_evento
       ON evidencias(id_evento);
     ''');
+
+    await db.execute('''
+      CREATE INDEX
+      IF NOT EXISTS
+      idx_sincronizacion_estado_fecha
+      ON sincronizacion(estado, fecha_creacion, id);
+    ''');
+
+    await db.execute('''
+      CREATE INDEX
+      IF NOT EXISTS
+      idx_sincronizacion_registro
+      ON sincronizacion(tabla, registro_id);
+    ''');
   }
 
 
@@ -203,8 +218,34 @@ class AvaMovilDatabase {
     int oldVersion,
     int newVersion,
   ) async {
-    // Lo usaremos cuando cambiemos
-    // la versión de SQLite.
+    if (oldVersion < 2 && newVersion >= 2) {
+      await db.execute('''
+        ALTER TABLE sincronizacion
+        ADD COLUMN payload_json TEXT;
+      ''');
+      await db.execute('''
+        ALTER TABLE sincronizacion
+        ADD COLUMN intentos INTEGER NOT NULL DEFAULT 0;
+      ''');
+      await db.execute('''
+        ALTER TABLE sincronizacion
+        ADD COLUMN fecha_actualizacion TEXT;
+      ''');
+      await db.execute('''
+        UPDATE sincronizacion
+        SET fecha_actualizacion = fecha_creacion
+        WHERE fecha_actualizacion IS NULL;
+      ''');
+
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_sincronizacion_estado_fecha
+        ON sincronizacion(estado, fecha_creacion, id);
+      ''');
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_sincronizacion_registro
+        ON sincronizacion(tabla, registro_id);
+      ''');
+    }
   }
 
 
@@ -215,20 +256,24 @@ class AvaMovilDatabase {
     final path =
         join(
       dbPath,
-      'avamovil.db',
+      _databaseName,
     );
 
-    await deleteDatabase(path);
+    final openDatabase = _database;
+    if (openDatabase != null) {
+      await openDatabase.close();
+      _database = null;
+    }
 
-    _database = null;
+    await deleteDatabase(path);
   }
 
-
   Future<void> close() async {
-    final db = await database;
-
+    final db = _database;
+    if (db == null) {
+      return;
+    }
     await db.close();
-
     _database = null;
   }
 }
