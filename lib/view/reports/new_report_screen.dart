@@ -8,20 +8,31 @@ import 'package:avamovil/view/reports/camera_access.dart';
 import 'package:avamovil/view/reports/report_qr_screen.dart';
 import 'package:avamovil/view/widgets/selection_field.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:avamovil/services/api_service.dart';
+
 
 class NewReportScreen extends StatefulWidget {
-  const NewReportScreen({super.key});
+  final String accessToken;
+
+  const NewReportScreen({
+    super.key,
+    required this.accessToken,
+  });
 
   @override
   State<NewReportScreen> createState() => _NewReportScreenState();
 }
+
 
 class _NewReportScreenState extends State<NewReportScreen> {
   final _formKey = GlobalKey<FormState>();
   final _referenceController = TextEditingController();
   final _descriptionController = TextEditingController();
   final List<XFile> _evidence = [];
-  String _selectedProject = DemoData.projects.first;
+  int? _selectedProjectId;
+  List<Map<String, dynamic>> _proyectosReales = [];
+  bool _cargandoProyectos = true;
+  String? _errorProyectos;
   String? _selectedCondition;
   int? _selectedSubjectId;
   bool _isThirdParty = false;
@@ -32,6 +43,44 @@ class _NewReportScreenState extends State<NewReportScreen> {
     _referenceController.dispose();
     _descriptionController.dispose();
     super.dispose();
+  }
+    @override
+  void initState() {
+    super.initState();
+    _cargarProyectos();
+  }
+  
+  Future<void> _cargarProyectos() async {
+    final servicio = ApiService(
+  accessToken: widget.accessToken,
+);
+
+    try {
+      final opciones = await servicio.obtenerOpcionesEventos();
+
+      final proyectos = (opciones['proyectos'] as List)
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .toList();
+
+      if (!mounted) return;
+
+      setState(() {
+        _proyectosReales = proyectos;
+        _cargandoProyectos = false;
+        _errorProyectos = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _cargandoProyectos = false;
+        _errorProyectos = 'No se pudieron cargar los proyectos.';
+      });
+
+      debugPrint('Error al cargar proyectos: $error');
+    } finally {
+      servicio.close();
+    }
   }
 
   Future<void> _pickEvidence() async {
@@ -184,23 +233,39 @@ class _NewReportScreenState extends State<NewReportScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SelectionField<String>(
-              label: 'PROYECTO',
-              value: _selectedProject,
-              options: DemoData.projects
-                  .map(
-                    (project) =>
-                        SelectionOption(value: project, label: project),
-                  )
-                  .toList(),
-              onChanged: (value) {
-                if (value == null) return;
-                setState(() {
-                  _selectedProject = value;
-                  _selectedSubjectId = null;
-                });
-              },
-            ),
+            
+if (_cargandoProyectos)
+  const Center(
+    child: CircularProgressIndicator(),
+  )
+else if (_errorProyectos != null)
+  Text(
+    _errorProyectos!,
+    style: const TextStyle(color: Colors.red),
+  )
+else
+  SelectionField<int>(
+    label: 'PROYECTO',
+    hint: 'Selecciona un proyecto',
+    value: _selectedProjectId,
+    options: _proyectosReales
+        .map(
+          (proyecto) => SelectionOption<int>(
+            value: proyecto['id_proyecto'] as int,
+            label: proyecto['nombre'] as String,
+          ),
+        )
+        .toList(),
+    onChanged: (value) {
+      setState(() {
+        _selectedProjectId = value;
+        _selectedSubjectId = null;
+      });
+    },
+    validator: (value) =>
+        value == null ? 'Selecciona un proyecto' : null,
+  ),
+
             const SizedBox(height: 14),
             const Text(
               '¿PARA QUIÉN ES EL REPORTE?',

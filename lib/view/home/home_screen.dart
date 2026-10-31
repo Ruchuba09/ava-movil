@@ -11,9 +11,15 @@ import 'package:avamovil/view/reports/report_detail_screen.dart';
 import 'package:avamovil/view/reports/report_qr_scanner_screen.dart';
 import 'package:avamovil/view/permissions/permissions_screen.dart';
 import 'package:avamovil/controller/theme_controller.dart';
+import 'package:avamovil/services/api_service.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final String accessToken;
+
+  const HomeScreen({
+    super.key,
+    required this.accessToken,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -23,11 +29,45 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   bool _showPermissions = false;
 
-  static const List<Widget> _widgetOptions = <Widget>[
-    NewReportScreen(),
-    ReportsScreen(onlyCurrentTeam: true),
-    ReportsScreen(onlyCurrentUser: true),
-  ];
+  
+  Future<void> _comprobarProyectos() async {
+    final servicio = ApiService(
+      accessToken: widget.accessToken,
+    );
+
+    try {
+      final proyectos = await servicio.obtenerProyectos();
+
+      if (!mounted) return;
+
+      debugPrint(
+        'Proyectos reales recibidos desde Laravel: ${proyectos.length}',
+      );
+    } on ApiException catch (error) {
+      debugPrint(
+        'Error al consultar proyectos: HTTP ${error.statusCode}',
+      );
+    } catch (error) {
+      debugPrint('Error de conexión con proyectos: $error');
+    } finally {
+      servicio.close();
+    }
+  } 
+
+  @override
+  void initState() {
+    super.initState();
+    _comprobarProyectos();
+  }
+
+
+ List<Widget> get _widgetOptions => [
+  NewReportScreen(
+    accessToken: widget.accessToken,
+  ),
+  const ReportsScreen(onlyCurrentTeam: true),
+  const ReportsScreen(onlyCurrentUser: true),
+];
 
   Future<void> _showNotifications() async {
     final demoData = DemoData.instance;
@@ -205,11 +245,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final isWorker = demoData.isWorker;
     final reportListTitle = isWorker ? 'Mis Reportes' : 'Todos los reportes';
     final pages = isWorker
-        ? const <Widget>[
-            NewReportScreen(),
-            ReportsScreen(onlyCurrentUser: true),
-          ]
-        : _widgetOptions;
+    ? <Widget>[
+        NewReportScreen(
+          accessToken: widget.accessToken,
+        ),
+        const ReportsScreen(onlyCurrentUser: true),
+      ]
+    : _widgetOptions;
     final tabs = isWorker
         ? const [
             GButton(icon: Icons.add_box, text: 'Crear Tarjeta'),

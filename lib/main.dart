@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:avamovil/styles/colors.dart';
-import 'package:avamovil/view/home/home_screen.dart';
 import 'package:avamovil/view/auth/login_screen.dart';
 import 'package:avamovil/controller/theme_controller.dart';
 
@@ -27,7 +26,7 @@ class MyApp extends StatelessWidget {
       title: 'AVA Móvil',
       debugShowCheckedModeBanner: false,
       routes: {
-        '/home': (context) => const HomeScreen(),
+        '/home': (context) => const LoginScreen(),
       },
       themeMode: themeController.themeMode,
       theme: ThemeData(

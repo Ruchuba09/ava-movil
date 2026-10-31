@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:avamovil/dev/demo_data.dart';
+import 'package:avamovil/services/api_service.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/home/home_screen.dart';
 
@@ -15,6 +15,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -23,26 +24,69 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _login() {
-    if (_formKey.currentState!.validate()) {
-      final authenticated = DemoData.instance.authenticate(
-        _emailController.text,
-        _passwordController.text,
+ 
+  Future<void> _login() async {
+    if (_isLoading || !_formKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final servicio = ApiService();
+
+    try {
+      final token = await servicio.iniciarSesion(
+        rut: _emailController.text.trim(),
+        password: _passwordController.text,
       );
-      if (!authenticated) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Correo o contraseña incorrectos.'),
-          ),
-        );
-        return;
-      }
+
+      if (!mounted) return;
+
+      debugPrint(
+        'Inicio de sesión correcto. Token recibido: ${token.isNotEmpty}',
+      );
+
       Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
+  context,
+  MaterialPageRoute(
+    builder: (context) => HomeScreen(
+      accessToken: token,
+    ),
+  ),
+);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+
+      final mensaje = error.statusCode == 422 ||
+              error.statusCode == 401
+          ? 'Correo o contraseña incorrectos.'
+          : 'Error del servidor (${error.statusCode}).';
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(mensaje)),
       );
+    } catch (error) {
+      if (!mounted) return;
+
+      debugPrint('Error de conexión durante el login: $error');
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No se pudo conectar con Laravel. '
+            'Revisa la conexión y el certificado HTTPS.',
+          ),
+        ),
+      );
+    } finally {
+      servicio.close();
+
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -116,7 +160,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 32),
                     ElevatedButton(
-                      onPressed: _login,
+                      onPressed: _isLoading ? null : _login,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: verde6Color,
                         foregroundColor: Colors.white,

@@ -41,7 +41,40 @@ class ApiService {
       );
     }
   }
+  
+  Future<String> iniciarSesion({
+    required String rut,
+    required String password,
+  }) async {
+    final response = await _client
+        .post(
+          _endpoint('login'),
+          headers: {
+            ..._headers(),
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            'rut': rut.trim(),
+            'password': password,
+            'device_name': 'ava_movil',
+          }),
+        )
+        .timeout(timeout);
 
+    final body = _decodeResponse(response);
+
+    if (body is! Map ||
+        body['access_token'] is! String ||
+        (body['access_token'] as String).isEmpty) {
+      throw const FormatException(
+        'Laravel no devolvió un token válido.',
+      );
+    }
+
+    return body['access_token'] as String;
+  }
+
+  
   Future<List<dynamic>> obtenerProyectos() async {
     final response = await _client
         .get(
@@ -60,6 +93,27 @@ class ApiService {
 
     return body;
   }
+
+  
+  Future<Map<String, dynamic>> obtenerOpcionesEventos() async {
+    final response = await _client
+        .get(
+          _endpoint('eventos/opciones'),
+          headers: _headers(),
+        )
+        .timeout(timeout);
+
+    final body = _decodeResponse(response);
+
+    if (body is! Map<String, dynamic>) {
+      throw const FormatException(
+        'Las opciones de eventos deben ser un objeto JSON.',
+      );
+    }
+
+    return body;
+  }
+
 
   Map<String, String> _headers() {
     return {

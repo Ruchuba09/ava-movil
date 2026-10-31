@@ -187,6 +187,115 @@ void main() {
         service.close();
       }
     });
+    
+    test('Inicia sesión y obtiene un token de Laravel', () async {
+      final clienteSimulado = MockClient((request) async {
+        expect(request.method, 'POST');
+
+        expect(
+          request.url.toString(),
+          'https://ejemplo.cl/api/v1/login',
+        );
+
+        expect(
+          request.headers['Accept'],
+          'application/json',
+        );
+
+        expect(
+          request.headers['Content-Type'],
+          contains('application/json'),
+        );
+
+        final datos = jsonDecode(request.body);
+
+        expect(datos['rut'], 'admin@empresa.cl');
+        expect(datos['password'], 'clave_de_prueba');
+        expect(datos['device_name'], 'ava_movil');
+
+        return http.Response(
+          jsonEncode({
+            'token_type': 'Bearer',
+            'access_token': 'token_simulado_123',
+          }),
+          200,
+          headers: {
+            'content-type': 'application/json',
+          },
+        );
+      });
+
+      final servicio = ApiService(
+        client: clienteSimulado,
+        baseUrl: 'https://ejemplo.cl/api/v1/',
+      );
+
+      try {
+        final token = await servicio.iniciarSesion(
+          rut: 'admin@empresa.cl',
+          password: 'clave_de_prueba',
+        );
+
+        expect(token, 'token_simulado_123');
+      } finally {
+        servicio.close();
+      }
+    });
+
+    
+    test('Obtiene las opciones reales para crear eventos', () async {
+      final clienteSimulado = MockClient((request) async {
+        expect(request.method, 'GET');
+
+        expect(
+          request.url.toString(),
+          'https://ejemplo.cl/api/v1/eventos/opciones',
+        );
+
+        expect(
+          request.headers['Authorization'],
+          'Bearer token_prueba',
+        );
+
+        return http.Response(
+          jsonEncode({
+            'tiposEvento': [
+              {
+                'id_tipo_evento': 5,
+                'nombre': 'Observacion preventiva',
+              }
+            ],
+            'usuarioTrabajador': null,
+            'trabajadores': [],
+            'proyectos': [
+              {
+                'id_proyecto': 1,
+                'nombre': 'Montaje Planta Norte',
+              }
+            ],
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+
+      final servicio = ApiService(
+        client: clienteSimulado,
+        baseUrl: 'https://ejemplo.cl/api/v1/',
+        accessToken: 'token_prueba',
+      );
+
+      try {
+        final opciones = await servicio.obtenerOpcionesEventos();
+
+        expect(opciones['tiposEvento'], isA<List>());
+        expect(opciones['trabajadores'], isA<List>());
+        expect(opciones['proyectos'], isA<List>());
+        expect(opciones['proyectos'][0]['id_proyecto'], 1);
+      } finally {
+        servicio.close();
+      }
+    });
 
   });
 }
