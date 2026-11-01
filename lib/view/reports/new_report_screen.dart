@@ -31,13 +31,30 @@ class _NewReportScreenState extends State<NewReportScreen> {
   final List<XFile> _evidence = [];
   int? _selectedProjectId;
   List<Map<String, dynamic>> _proyectosReales = [];
+  List<Map<String, dynamic>> _trabajadoresReales = [];
   bool _cargandoProyectos = true;
   String? _errorProyectos;
-  String? _selectedCondition;
+  
+  String get _selectedProject {
+    for (final proyecto in _proyectosReales) {
+      if (proyecto['id_proyecto'] == _selectedProjectId) {
+        return proyecto['nombre'] as String;
+      }
+    }
+    return '';
+  }
+
+  int? _selectedConditionId;
+
+
+  String get _selectedCondition {
+    if (_selectedConditionId == null) return '';
+    return DemoData.conditions[_selectedConditionId! - 1];
+  }
+
   int? _selectedSubjectId;
   bool _isThirdParty = false;
   bool _isSubmitting = false;
-
   @override
   void dispose() {
     _referenceController.dispose();
@@ -61,11 +78,15 @@ class _NewReportScreenState extends State<NewReportScreen> {
       final proyectos = (opciones['proyectos'] as List)
           .map((item) => Map<String, dynamic>.from(item as Map))
           .toList();
+        final trabajadores = (opciones['trabajadores'] as List)
+    .map((item) => Map<String, dynamic>.from(item as Map))
+    .toList();
 
       if (!mounted) return;
 
       setState(() {
         _proyectosReales = proyectos;
+        _trabajadoresReales = trabajadores;
         _cargandoProyectos = false;
         _errorProyectos = null;
       });
@@ -175,7 +196,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
     demoData.addReport(
       project: _selectedProject,
       reference: _referenceController.text.trim(),
-      condition: _selectedCondition!,
+      condition: _selectedCondition,
       description: _descriptionController.text.trim(),
       evidence: _evidence.map((file) => file.path).toList(),
       isThirdParty: _isThirdParty,
@@ -298,30 +319,39 @@ else
             ),
             if (_isThirdParty) ...[
               const SizedBox(height: 10),
-              SelectionField<int>(
-                key: ValueKey(_selectedProject),
-                label: 'PERSONA REPORTADA',
-                hint: 'Selecciona a la persona reportada',
-                value: _selectedSubjectId,
-                options: DemoData.instance
-                    .workersForProject(_selectedProject)
-                    .map(
-                      (worker) => SelectionOption<int>(
-                        value: worker['id'] as int,
-                        label: worker['name'] as String,
-                      ),
-                    )
-                    .toList(),
-                onChanged: (value) =>
-                    setState(() => _selectedSubjectId = value),
-                validator: (value) => _isThirdParty && value == null
-                    ? DemoData.instance
-                              .workersForProject(_selectedProject)
-                              .isEmpty
-                          ? 'No hay personas disponibles para este proyecto'
-                          : 'Selecciona a la persona reportada'
-                    : null,
-              ),
+              
+SelectionField<int>(
+  key: ValueKey(_selectedProjectId),
+  label: 'PERSONA REPORTADA',
+  hint: 'Selecciona a la persona reportada',
+  value: _selectedSubjectId,
+  options: _trabajadoresReales
+      .where((trabajador) {
+        final proyectos = trabajador['proyectos'] as List? ?? [];
+
+        return proyectos.any(
+          (proyecto) =>
+              proyecto['id_proyecto'] == _selectedProjectId,
+        );
+      })
+      .map(
+        (trabajador) => SelectionOption<int>(
+          value: trabajador['id_trabajador'] as int,
+          label: trabajador['nombre'] as String,
+        ),
+      )
+      .toList(),
+  onChanged: (value) {
+    setState(() => _selectedSubjectId = value);
+  },
+  validator: (value) {
+    if (_isThirdParty && value == null) {
+      return 'Selecciona a la persona reportada';
+    }
+    return null;
+  },
+),
+
             ],
             const SizedBox(height: 14),
             const Text(
@@ -340,21 +370,25 @@ else
                   : null,
             ),
             const SizedBox(height: 14),
-            SelectionField<String>(
-              label: 'CONDICIÓN DEL EVENTO (PARE)',
-              wrapOptionLabels: true,
-              hint: 'Seleccione la condición identificada',
-              value: _selectedCondition,
-              options: DemoData.conditions
-                  .map(
-                    (condition) =>
-                        SelectionOption(value: condition, label: condition),
-                  )
-                  .toList(),
-              onChanged: (value) => setState(() => _selectedCondition = value),
-              validator: (value) =>
-                  value == null ? 'Seleccione una condición' : null,
-            ),
+            
+SelectionField<int>(
+  label: 'CONDICIÓN DEL EVENTO (PARE)',
+  wrapOptionLabels: true,
+  hint: 'Seleccione la condición identificada',
+  value: _selectedConditionId,
+  options: DemoData.conditions.asMap().entries.map((entry) {
+    return SelectionOption<int>(
+      value: entry.key + 1,
+      label: entry.value,
+    );
+  }).toList(),
+  onChanged: (value) {
+    setState(() => _selectedConditionId = value);
+  },
+  validator: (value) =>
+      value == null ? 'Seleccione una condición' : null,
+),
+
             const SizedBox(height: 14),
             const Text(
               'DESCRIPCIÓN DETALLADA',

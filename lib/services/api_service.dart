@@ -114,6 +114,47 @@ class ApiService {
     return body;
   }
 
+  
+  Future<Map<String, dynamic>> registrarEvento({
+    required int idTipoEvento,
+    required int condicion,
+    required String descripcion,
+    required String referencia,
+    required int idProyecto,
+    required bool esParaMi,
+    int? idTrabajador,
+  }) async {
+    final response = await _client
+        .post(
+          _endpoint('eventos'),
+          headers: {
+            ..._headers(),
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            'id_tipo_evento': idTipoEvento,
+            'condicion': condicion,
+            'descripcion': descripcion.trim(),
+            'referencia': referencia.trim(),
+            'id_proyecto': idProyecto,
+            'es_para_mi': esParaMi,
+            if (!esParaMi && idTrabajador != null)
+              'id_trabajador': idTrabajador,
+          }),
+        )
+        .timeout(timeout);
+
+    final body = _decodeResponse(response);
+
+    if (body is! Map<String, dynamic>) {
+      throw const FormatException(
+        'Laravel no devolvió un evento válido.',
+      );
+    }
+
+    return body;
+  }
+
 
   Map<String, String> _headers() {
     return {
