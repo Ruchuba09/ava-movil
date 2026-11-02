@@ -61,13 +61,19 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
 
- List<Widget> get _widgetOptions => [
-  NewReportScreen(
+  List<Widget> get _widgetOptions => [
+    NewReportScreen(
+      accessToken: widget.accessToken,
+    ),
+    ReportsScreen(
     accessToken: widget.accessToken,
+    onlyCurrentTeam: true,
   ),
-  const ReportsScreen(onlyCurrentTeam: true),
-  const ReportsScreen(onlyCurrentUser: true),
-];
+  ReportsScreen(
+    accessToken: widget.accessToken,
+    onlyCurrentUser: true,
+  ),
+  ];
 
   Future<void> _showNotifications() async {
     final demoData = DemoData.instance;
@@ -231,7 +237,9 @@ class _HomeScreenState extends State<HomeScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute<void>(
-        builder: (context) => const ReportQrScannerScreen(),
+        builder: (context) => ReportQrScannerScreen(
+          accessToken: widget.accessToken,
+        ),
       ),
     );
   }
@@ -249,7 +257,10 @@ class _HomeScreenState extends State<HomeScreen> {
         NewReportScreen(
           accessToken: widget.accessToken,
         ),
-        const ReportsScreen(onlyCurrentUser: true),
+        ReportsScreen(
+          accessToken: widget.accessToken,
+          onlyCurrentUser: true,
+        ),
       ]
     : _widgetOptions;
     final tabs = isWorker
@@ -549,9 +560,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-      body: _showPermissions && !isWorker
-          ? const PermissionsScreen()
-          : pages.elementAt(_selectedIndex),
+      
+body: _showPermissions && !isWorker
+    ? PermissionsScreen(
+        accessToken: widget.accessToken,
+      )
+    : pages.elementAt(_selectedIndex),
+
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Theme.of(context).scaffoldBackgroundColor,

@@ -1,6 +1,6 @@
 
 import 'dart:convert';
-
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
@@ -46,6 +46,7 @@ class ApiService {
     required String rut,
     required String password,
   }) async {
+
     final response = await _client
         .post(
           _endpoint('login'),
@@ -113,6 +114,116 @@ class ApiService {
 
     return body;
   }
+  
+  Future<List<dynamic>> obtenerEventos() async {
+    final response = await _client
+        .get(
+          _endpoint('eventos'),
+          headers: _headers(),
+        )
+        .timeout(timeout);
+
+    final body = _decodeResponse(response);
+
+    if (body is! List) {
+      throw const FormatException(
+        'Laravel debe devolver una lista de eventos.',
+      );
+    }
+
+    return body;
+  }
+
+  
+  Future<List<dynamic>> obtenerMisReportes() async {
+    final response = await _client
+        .get(
+          _endpoint('eventos/mis-reportes'),
+          headers: _headers(),
+        )
+        .timeout(timeout);
+
+    final body = _decodeResponse(response);
+
+    if (body is! List) {
+      throw const FormatException(
+        'Laravel debe devolver una lista de mis reportes.',
+      );
+    }
+
+    return body;
+  }
+
+  
+Future<List<dynamic>> obtenerReportesMiCuadrilla() async {
+  
+final usuarioResponse = await _client
+    .get(
+      _endpoint('user'),
+      headers: _headers(),
+    )
+    .timeout(timeout);
+
+debugPrint(
+  'USUARIO AUTENTICADO POR SANCTUM: '
+  '${usuarioResponse.statusCode} - ${usuarioResponse.body}',
+);
+
+  final response = await _client
+      .get(
+        _endpoint('eventos/mi-cuadrilla'),
+        headers: _headers(),
+      )
+      .timeout(timeout);
+
+  final body = _decodeResponse(response);
+
+  if (body is! List) {
+    throw const FormatException(
+      'Laravel debe devolver una lista de reportes de la cuadrilla.',
+    );
+  }
+
+  return body;
+}
+
+  
+Future<Map<String, dynamic>> cerrarEvento({
+  required int idEvento,
+  required String justificacion,
+}) async {
+  final texto = justificacion.trim();
+
+  if (texto.isEmpty || texto.length > 500) {
+    throw ArgumentError(
+      'La justificación debe tener entre 1 y 500 caracteres.',
+    );
+  }
+
+  final response = await _client
+      .patch(
+        _endpoint('eventos/$idEvento/cerrar'),
+        headers: {
+          ..._headers(),
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'justificacion': texto,
+        }),
+      )
+      .timeout(timeout);
+
+  final body = _decodeResponse(response);
+
+  if (body is! Map<String, dynamic>) {
+    throw const FormatException(
+      'Laravel no devolvió un evento válido.',
+    );
+  }
+
+  return body;
+}
+
 
   
   Future<Map<String, dynamic>> registrarEvento({
@@ -123,37 +234,74 @@ class ApiService {
     required int idProyecto,
     required bool esParaMi,
     int? idTrabajador,
+    List<XFile> evidencias = const [],
   }) async {
-    final response = await _client
-        .post(
-          _endpoint('eventos'),
-          headers: {
-            ..._headers(),
-            'Content-Type': 'application/json',
-          },
-          body: jsonEncode({
-            'id_tipo_evento': idTipoEvento,
-            'condicion': condicion,
-            'descripcion': descripcion.trim(),
-            'referencia': referencia.trim(),
-            'id_proyecto': idProyecto,
-            'es_para_mi': esParaMi,
-            if (!esParaMi && idTrabajador != null)
-              'id_trabajador': idTrabajador,
-          }),
-        )
-        .timeout(timeout);
+    if (evidencias.length > 3) {
+      throw ArgumentError('Se permiten máximo 3 evidencias.');
+    }
+
+    if (!esParaMi && idTrabajador == null) {
+      throw ArgumentError(
+        'Debe seleccionar a la persona reportada.',
+      );
+    }
+
+    final request = http.MultipartRequest(
+      'POST',
+      _endpoint('eventos'),
+    );
+
+    request.headers.addAll(_headers());
+
+    request.fields.addAll({
+      'id_tipo_evento': idTipoEvento.toString(),
+      'condicion': condicion.toString(),
+      'descripcion': descripcion.trim(),
+      'referencia': referencia.trim(),
+      'id_proyecto': idProyecto.toString(),
+      'es_para_mi': esParaMi ? '1' : '0',
+      if (!esParaMi && idTrabajador != null)
+        'id_trabajador': idTrabajador.toString(),
+    });
+
+    for (final evidencia in evidencias) {
+      final bytes = await evidencia.readAsBytes();
+
+      if (bytes.length > 5 * 1024 * 1024) {
+        throw ArgumentError(
+          'Cada evidencia debe pesar máximo 5 MB.',
+        );
+      }
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'evidencia[]',
+          bytes,
+          filename: evidencia.name,
+        ),
+      );
+    }
+
+    final streamedResponse =
+        await _client.send(request).timeout(timeout);
+
+    final response =
+        await http.Response.fromStream(streamedResponse)
+            .timeout(timeout);
 
     final body = _decodeResponse(response);
 
-    if (body is! Map<String, dynamic>) {
+    if (response.statusCode != 201 ||
+        body is! Map<String, dynamic> ||
+        body['id_evento'] is! int) {
       throw const FormatException(
-        'Laravel no devolvió un evento válido.',
+        'Laravel no confirmó correctamente el registro.',
       );
     }
 
     return body;
   }
+
 
 
   Map<String, String> _headers() {

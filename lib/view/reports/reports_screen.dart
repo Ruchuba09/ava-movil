@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
-import 'package:avamovil/view/reports/report_detail_screen.dart';
 import 'package:avamovil/view/widgets/selection_field.dart';
+import 'package:avamovil/services/api_service.dart';
+import 'package:avamovil/view/reports/report_detail_screen.dart';
 
 class ReportsScreen extends StatefulWidget {
+  final String accessToken;
   final String initialStatusFilter;
   final String initialProjectFilter;
   final bool onlyCurrentUser;
@@ -12,6 +14,7 @@ class ReportsScreen extends StatefulWidget {
 
   const ReportsScreen({
     super.key,
+    required this.accessToken,
     this.initialStatusFilter = 'Todos',
     this.initialProjectFilter = 'Todos los proyectos',
     this.onlyCurrentUser = false,
@@ -23,6 +26,8 @@ class ReportsScreen extends StatefulWidget {
 }
 
 class _ReportsScreenState extends State<ReportsScreen> {
+  List<Map<String, dynamic>> _eventosReales = [];
+  bool _cargandoEventos = false;
   late String _statusFilter;
   late String _projectFilter;
   String _conditionFilter = 'Todas';
@@ -31,10 +36,121 @@ class _ReportsScreenState extends State<ReportsScreen> {
   DateTime? _toDate;
 
   @override
-  void initState() {
-    super.initState();
-    _statusFilter = widget.initialStatusFilter;
-    _projectFilter = widget.initialProjectFilter;
+void initState() {
+  super.initState();
+  _statusFilter = widget.initialStatusFilter;
+  _projectFilter = widget.initialProjectFilter;
+  _cargarEventos();
+}
+
+  
+  Map<String, dynamic> _adaptarEvento(Map<String, dynamic> evento) {
+    final proyecto = evento['proyecto'] as Map?;
+    final fecha = DateTime.parse(
+      evento['fecha_creacion'] as String,
+    ).toLocal();
+
+    final condicionNumero =
+        (num.tryParse(evento['condicion'].toString()) ?? 0)
+            .toInt();
+
+    return {
+      'id_evento': evento['id_evento'],
+      'id': 'EVENTO-${evento['id_evento']}',
+      'displayId': '#${evento['id_evento']}',
+      'project': proyecto?['nombre'] ?? 'Proyecto desconocido',
+      'condition': '#$condicionNumero',
+      'conditionText': condicionNumero >= 1 &&
+              condicionNumero <= DemoData.conditions.length
+          ? DemoData.conditions[condicionNumero - 1]
+          : 'Condición no especificada',
+      'reference': evento['referencia'] ?? '',
+      'description': evento['descripcion'] ?? '',
+      'status': evento['estado'] == 'abierta'
+          ? 'ABIERTA'
+          : evento['estado'] == 'cerrada'
+              ? 'CERRADA'
+              : evento['estado'].toString().toUpperCase(),
+      'date': fecha,
+      'createdAt': fecha,
+      'hasConnectionAtCreation': true,
+      'isThirdParty': false,
+      'reporter': 'Registrado en Laravel',
+      'createdBy': 'Registrado en Laravel',
+      'subject': 'No especificado',
+      'evidence': evento['evidencia'] ?? [],
+    };
+  }
+
+  Future<void> _cargarEventos() async {
+    setState(() => _cargandoEventos = true);
+
+    final servicio = ApiService(
+      accessToken: widget.accessToken,
+    );
+
+    try {
+      
+      final eventos = widget.onlyCurrentUser
+          ? await servicio.obtenerMisReportes()
+          : widget.onlyCurrentTeam
+              ? await servicio.obtenerReportesMiCuadrilla()
+              : await servicio.obtenerEventos();
+
+
+      if (!mounted) return;
+
+      
+      setState(() {
+        _eventosReales = eventos
+            .map(
+              (evento) => _adaptarEvento(
+                Map<String, dynamic>.from(evento as Map),
+              ),
+            )
+            .toList();
+      });
+
+
+      debugPrint(
+        'Eventos reales recibidos desde Laravel: ${_eventosReales.length}',
+      );
+
+      debugPrint(
+        'Evento 501 encontrado: ${_eventosReales.any((e) => e['id_evento'] == 501)}',
+      );
+      for (final evento in _eventosReales) {
+        if (evento['id_evento'] == 501) {
+          debugPrint('Estructura del evento 501: $evento');
+          break;
+        }
+      }
+    
+} catch (error) {
+  final origen = widget.onlyCurrentUser
+      ? 'eventos/mis-reportes'
+      : widget.onlyCurrentTeam
+          ? 'eventos/mi-cuadrilla'
+          : 'eventos';
+
+  debugPrint('ERROR EN $origen: $error');
+
+  if (mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('No se pudieron cargar los reportes: $error'),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+}
+ finally {
+      servicio.close();
+
+      if (mounted) {
+        setState(() => _cargandoEventos = false);
+      }
+    }
   }
 
   @override
@@ -68,15 +184,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final demoData = DemoData.instance;
+    if (_cargandoEventos) {
+    return const Center(
+      child: CircularProgressIndicator(),
+    );
+  }
+    
 
     return AnimatedBuilder(
       animation: demoData,
       builder: (context, child) {
-        final sourceReports = widget.onlyCurrentUser
-            ? demoData.currentUserReports
-            : widget.onlyCurrentTeam
-            ? demoData.currentUserTeamReports
-            : demoData.reports;
+        
+        final sourceReports = _eventosReales;
+
         final matchingReports = sourceReports.where((report) {
           final date = report['date'] as DateTime;
           final passProject =
@@ -371,7 +491,23 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           ),
                           clipBehavior: Clip.antiAlias,
                           child: InkWell(
-                            onTap: () => _openReport(report),
+                            
+                            onTap: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => ReportDetailScreen(
+                                    report: report,
+                                    isLider: true,
+                                    accessToken: widget.accessToken,
+                                  ),
+                                ),
+                              );
+
+                              if (mounted) {
+                                await _cargarEventos();
+                              }
+                            },
+
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 12,
@@ -535,15 +671,5 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return '${date.day.toString().padLeft(2, '0')}-${date.month.toString().padLeft(2, '0')}-${date.year} · ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   }
 
-  void _openReport(Map<String, dynamic> report) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ReportDetailScreen(
-          report: report,
-          isLider: DemoData.instance.canCloseReport(report),
-        ),
-      ),
-    );
-  }
+  
 }

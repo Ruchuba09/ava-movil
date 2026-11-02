@@ -16,19 +16,35 @@ class ReportQrScreen extends StatelessWidget {
     this.isNewReport = true,
   });
 
-  String get _payload => jsonEncode({
+  
+String get _payload {
+  final idEvento = report['id_evento'];
+
+  if (idEvento is int && idEvento > 0) {
+    return jsonEncode({
+      'version': 3,
+      'action': 'view_event',
+      'id_evento': idEvento,
+    });
+  }
+
+  // Compatibilidad temporal con reportes de demostración.
+  return jsonEncode({
     'version': 2,
     'action': 'sync_report',
     'id': report['id'],
     'report': DemoData.instance.reportForQr(report),
   });
+}
+
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final demoData = DemoData.instance;
-    final canClose =
-        report['status'] == 'ABIERTA' && demoData.canCloseReport(report);
+    final canClose = report['id_evento'] == null &&
+    report['status'] == 'ABIERTA' &&
+    demoData.canCloseReport(report);
     final hadConnection = report['hasConnectionAtCreation'] as bool? ?? false;
     final qrSize = (MediaQuery.sizeOf(context).width - 88)
         .clamp(180.0, 320.0)

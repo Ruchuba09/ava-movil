@@ -10,16 +10,21 @@ import 'package:avamovil/view/reports/camera_access.dart';
 import 'package:avamovil/view/reports/report_qr_screen.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
+import 'package:avamovil/services/api_service.dart';
+
 
 class ReportDetailScreen extends StatefulWidget {
   final Map<String, dynamic> report;
   final bool isLider;
+  final String? accessToken;
 
   const ReportDetailScreen({
     super.key,
     required this.report,
     this.isLider = true,
+    this.accessToken,
   });
+
 
   @override
   State<ReportDetailScreen> createState() => _ReportDetailScreenState();
@@ -31,13 +36,21 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   final List<String> _evidence = [];
   bool _showReportEvidence = false;
   bool _showActivityLog = false;
+  bool _cerrandoEvento = false;
 
   @override
   void initState() {
     super.initState();
-    DemoData.instance.recordReportViewed(widget.report);
+    if (widget.report['id_evento'] == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          DemoData.instance.recordReportViewed(widget.report);
+        }
+      });
+    }
   }
 
+  
   @override
   void dispose() {
     _descController.dispose();
@@ -124,32 +137,122 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     }
   }
 
-  void _closeReport() {
-    if (!_formKey.currentState!.validate()) return;
-    if (_evidence.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Adjunta al menos una evidencia para cerrar.'),
-        ),
-      );
-      return;
-    }
-    DemoData.instance.closeReport(
-      widget.report,
-      _descController.text.trim(),
-      _evidence,
-    );
+  
+Future<void> _closeReport() async {
+  if (_cerrandoEvento) return;
+  if (!_formKey.currentState!.validate()) return;
+
+  final id = widget.report['id_evento'];
+  final token = widget.accessToken;
+  final justificacion = _descController.text.trim();
+
+  if (id is! int || token == null || token.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Reporte cerrado correctamente')),
-    );
-    final isOffline = widget.report['hasConnectionAtCreation'] == false;
-    Navigator.of(context).pushReplacement<void, void>(
-      MaterialPageRoute<void>(
-        builder: (context) => isOffline
-            ? ReportQrScreen(report: widget.report, isNewReport: false)
-            : ReportDetailScreen(report: widget.report, isLider: false),
+      const SnackBar(
+        content: Text('No se puede cerrar: faltan datos de autenticación.'),
       ),
     );
+    return;
+  }
+
+  if (justificacion.isEmpty || justificacion.length > 500) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('La justificación debe tener entre 1 y 500 caracteres.'),
+      ),
+    );
+    return;
+  }
+
+  if (_evidence.isNotEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'El envío de evidencias de cierre aún no está integrado. '
+          'Quita los archivos para continuar.',
+        ),
+      ),
+    );
+    return;
+  }
+
+  final confirmar = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Confirmar cierre'),
+      content: Text(
+        '¿Confirmas el cierre definitivo del evento N.º $id en Laravel?',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: const Text('Confirmar cierre'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirmar != true || !mounted) return;
+
+  setState(() => _cerrandoEvento = true);
+
+  final servicio = ApiService(accessToken: token);
+
+  try {
+    final resultado = await servicio.cerrarEvento(
+      idEvento: id,
+      justificacion: justificacion,
+    );
+
+    if (!mounted) return;
+
+    if (resultado['estado'] != 'cerrada') {
+      throw StateError('Laravel no confirmó el estado cerrado.');
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Evento N.º $id cerrado en Laravel.')),
+    );
+
+    Navigator.of(context).pop(true);
+  } catch (error) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('No se pudo cerrar el evento: $error')),
+    );
+  } finally {
+    servicio.close();
+    if (mounted) {
+      setState(() => _cerrandoEvento = false);
+    }
+  }
+}
+
+  List<String> _normalizarEvidencias(dynamic valor) {
+    if (valor == null) return [];
+
+    if (valor is String) {
+      final texto = valor.trim();
+      return texto.isEmpty ? [] : [texto];
+    }
+
+    if (valor is Map) {
+      final archivo = valor['archivo'] ?? valor['ruta'] ?? valor['path'];
+      return archivo is String && archivo.trim().isNotEmpty
+          ? [archivo]
+          : [];
+    }
+
+    if (valor is List) {
+      return valor.expand((item) => _normalizarEvidencias(item)).toList();
+    }
+
+    return [];
   }
 
   @override
@@ -159,13 +262,10 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     final reportDate =
         widget.report['createdAt'] as DateTime? ??
         widget.report['date'] as DateTime;
-    final reportEvidence = (widget.report['evidence'] as List<dynamic>? ?? [])
-        .map((path) => path.toString())
-        .toList();
+    final reportEvidence = _normalizarEvidencias(widget.report['evidence']);
+
     final closeEvidence =
-        (widget.report['closeEvidence'] as List<dynamic>? ?? [])
-            .map((path) => path.toString())
-            .toList();
+        _normalizarEvidencias(widget.report['closeEvidence']);
     final activityLog =
         (widget.report['activityLog'] as List<dynamic>? ?? const [])
             .whereType<Map<String, dynamic>>()
@@ -215,7 +315,8 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                     const Divider(),
                     _buildInfoRow(
                       'Proyecto',
-                      widget.report['project'].toString(),
+                      (widget.report['project'] ?? 'Proyecto no disponible')
+                          .toString(),
                     ),
                     _buildInfoRow(
                       'Referencia (lugar)',
@@ -267,8 +368,11 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                     const SizedBox(height: 4),
                     Text(widget.report['description'].toString()),
                     if (!isOpen &&
-                        (widget.report['closeDescription'] as String)
-                            .isNotEmpty) ...[
+                        (widget.report['closeDescription']
+                                ?.toString()
+                                .trim()
+                                .isNotEmpty ??
+                            false)) ...[
                       const SizedBox(height: 16),
                       const Text(
                         'Descripción del cierre',
@@ -688,6 +792,9 @@ class _VideoEvidenceScreenState extends State<_VideoEvidenceScreen> {
     _controller.dispose();
     super.dispose();
   }
+
+  
+
 
   @override
   Widget build(BuildContext context) => Scaffold(

@@ -258,7 +258,13 @@ void main() {
     final data = DemoData.instance;
     data.authenticate('trabajador@ejemplo.cl', '1234');
 
-    await tester.pumpWidget(const MaterialApp(home: ReportQrScannerScreen()));
+    await tester.pumpWidget(
+  const MaterialApp(
+    home: ReportQrScannerScreen(
+      accessToken: 'token-de-prueba',
+    ),
+  ),
+);
     await tester.pumpAndSettle();
 
     expect(

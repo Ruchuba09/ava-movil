@@ -8,9 +8,18 @@ import 'package:avamovil/view/reports/camera_access.dart';
 import 'package:avamovil/view/reports/report_detail_screen.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:avamovil/services/api_service.dart';
+
+
 
 class ReportQrScannerScreen extends StatefulWidget {
-  const ReportQrScannerScreen({super.key});
+  final String accessToken;
+
+  const ReportQrScannerScreen({
+    super.key,
+    required this.accessToken,
+  });
+
 
   @override
   State<ReportQrScannerScreen> createState() => _ReportQrScannerScreenState();
@@ -134,77 +143,109 @@ class _ReportQrScannerScreenState extends State<ReportQrScannerScreen> {
     super.dispose();
   }
 
-  Future<void> _handleDetection(BarcodeCapture capture) async {
-    if (_handlingScan) return;
-    String? payload;
-    for (final barcode in capture.barcodes) {
-      if (barcode.rawValue != null) {
-        payload = barcode.rawValue;
-        break;
-      }
-    }
-    if (payload == null) return;
+  
+Future<void> _handleDetection(BarcodeCapture capture) async {
+  if (_handlingScan) return;
 
-    _handlingScan = true;
-    Map<String, dynamic>? report;
-    try {
-      report = _reportFromPayload(payload);
-    } on FormatException catch (error) {
-      await _showScanError(error.message);
-      return;
+  String? payload;
+  for (final barcode in capture.barcodes) {
+    if (barcode.rawValue != null) {
+      payload = barcode.rawValue;
+      break;
     }
+  }
 
-    if (report == null) {
-      await _showScanError(
-        'El código QR no corresponde a una tarjeta PARE disponible.',
+  if (payload == null) return;
+
+  _handlingScan = true;
+
+  try {
+    final decoded = jsonDecode(payload);
+
+    if (decoded is! Map ||
+        decoded['version'] != 3 ||
+        decoded['action'] != 'view_event' ||
+        decoded['id_evento'] is! int ||
+        (decoded['id_evento'] as int) <= 0) {
+      throw const FormatException(
+        'Este QR no corresponde a una Tarjeta PARE registrada en Laravel.',
       );
-      return;
     }
-    DemoData.instance.recordReportQrScanned(report);
+
+    final idEvento = decoded['id_evento'] as int;
+    final servicio = ApiService(accessToken: widget.accessToken);
+
+    Map<String, dynamic> evento;
+
+    try {
+      final eventos = await servicio.obtenerEventos();
+
+      final encontrado = eventos.firstWhere(
+        (item) => item is Map && item['id_evento'] == idEvento,
+        orElse: () => null,
+      );
+
+      if (encontrado is! Map) {
+        throw const FormatException(
+          'No se encontró el evento en Laravel.',
+        );
+      }
+
+      evento = Map<String, dynamic>.from(encontrado);
+    } finally {
+      servicio.close();
+    }
+
     if (!mounted) return;
-    await Navigator.of(context).pushReplacement<void, void>(
+
+    final proyecto = evento['proyecto'] as Map?;
+    final condicion =
+        (num.tryParse(evento['condicion'].toString()) ?? 0).toInt();
+    final fecha = DateTime.parse(
+      evento['fecha_creacion'] as String,
+    ).toLocal();
+
+    final report = <String, dynamic>{
+      'id_evento': idEvento,
+      'id': 'EVENTO-$idEvento',
+      'displayId': '#$idEvento',
+      'project': proyecto?['nombre'] ?? 'Proyecto desconocido',
+      'condition': '#$condicion',
+      'conditionText': condicion >= 1 &&
+              condicion <= DemoData.conditions.length
+          ? DemoData.conditions[condicion - 1]
+          : 'Condición no especificada',
+      'reference': evento['referencia'] ?? '',
+      'description': evento['descripcion'] ?? '',
+      'status': evento['estado'].toString().toUpperCase(),
+      'date': fecha,
+      'createdAt': fecha,
+      'hasConnectionAtCreation': true,
+      'isThirdParty': false,
+      'reporter': 'Registrado en Laravel',
+      'createdBy': 'Registrado en Laravel',
+      'subject': 'No especificado',
+      'evidence': evento['evidencia'] ?? [],
+    };
+
+    await Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (context) => ReportDetailScreen(
-          report: report!,
-          isLider: DemoData.instance.canCloseReport(report),
+          report: report,
+          isLider: true,
+          accessToken: widget.accessToken,
         ),
       ),
     );
+  } on FormatException catch (error) {
+    await _showScanError(error.message);
+  } catch (error) {
+    await _showScanError('No se pudo consultar Laravel: $error');
   }
+}
 
-  Map<String, dynamic>? _reportFromPayload(String payload) {
-    final demoData = DemoData.instance;
-    try {
-      final decoded = jsonDecode(payload);
-      if (decoded is Map) {
-        final sharedReport = decoded['report'];
-        if (sharedReport is Map) {
-          return demoData.importReportFromQr(sharedReport);
-        }
-        final reportId = decoded['id'];
-        if (reportId is String &&
-            (decoded['action'] == 'sync_report' ||
-                decoded['action'] == 'close_report')) {
-          return demoData.importReportFromQr(decoded);
-        }
-        if (reportId is String) {
-          final matches = demoData.reports.where(
-            (report) => report['id'] == reportId,
-          );
-          return matches.isEmpty ? null : matches.first;
-        }
-      }
-    } on FormatException {
-      if (payload.startsWith('#')) {
-        final matches = demoData.reports.where(
-          (report) => report['id'] == payload,
-        );
-        return matches.isEmpty ? null : matches.first;
-      }
-      rethrow;
-    }
-    return null;
-  }
+
+  
 
   Future<void> _showScanError(String message) async {
     if (!mounted) return;

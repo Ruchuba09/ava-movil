@@ -1,11 +1,9 @@
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/reports/camera_access.dart';
-import 'package:avamovil/view/reports/report_qr_screen.dart';
 import 'package:avamovil/view/widgets/selection_field.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:avamovil/services/api_service.dart';
@@ -34,27 +32,11 @@ class _NewReportScreenState extends State<NewReportScreen> {
   List<Map<String, dynamic>> _trabajadoresReales = [];
   bool _cargandoProyectos = true;
   String? _errorProyectos;
-  
-  String get _selectedProject {
-    for (final proyecto in _proyectosReales) {
-      if (proyecto['id_proyecto'] == _selectedProjectId) {
-        return proyecto['nombre'] as String;
-      }
-    }
-    return '';
-  }
-
   int? _selectedConditionId;
-
-
-  String get _selectedCondition {
-    if (_selectedConditionId == null) return '';
-    return DemoData.conditions[_selectedConditionId! - 1];
-  }
-
   int? _selectedSubjectId;
   bool _isThirdParty = false;
   bool _isSubmitting = false;
+  static const int _tipoEventoPare = 4;
   @override
   void dispose() {
     _referenceController.dispose();
@@ -67,42 +49,52 @@ class _NewReportScreenState extends State<NewReportScreen> {
     _cargarProyectos();
   }
   
-  Future<void> _cargarProyectos() async {
-    final servicio = ApiService(
-  accessToken: widget.accessToken,
-);
+  
 
-    try {
-      final opciones = await servicio.obtenerOpcionesEventos();
+Future<void> _cargarProyectos() async {
+  final servicio = ApiService(
+    accessToken: widget.accessToken,
+  );
 
-      final proyectos = (opciones['proyectos'] as List)
-          .map((item) => Map<String, dynamic>.from(item as Map))
-          .toList();
-        final trabajadores = (opciones['trabajadores'] as List)
-    .map((item) => Map<String, dynamic>.from(item as Map))
-    .toList();
+  try {
+    final opciones = await servicio.obtenerOpcionesEventos();
 
-      if (!mounted) return;
+    final proyectos = (opciones['proyectos'] as List)
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
 
-      setState(() {
-        _proyectosReales = proyectos;
-        _trabajadoresReales = trabajadores;
-        _cargandoProyectos = false;
-        _errorProyectos = null;
-      });
-    } catch (error) {
-      if (!mounted) return;
+    final trabajadores = (opciones['trabajadores'] as List)
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
 
-      setState(() {
-        _cargandoProyectos = false;
-        _errorProyectos = 'No se pudieron cargar los proyectos.';
-      });
+    if (!mounted) return;
 
-      debugPrint('Error al cargar proyectos: $error');
-    } finally {
-      servicio.close();
-    }
+    setState(() {
+      _proyectosReales = proyectos;
+      _trabajadoresReales = trabajadores;
+      _cargandoProyectos = false;
+      _errorProyectos = null;
+    });
+
+    debugPrint(
+      'Opciones PARE: ${proyectos.length} proyectos, '
+      '${trabajadores.length} trabajadores.',
+    );
+  } catch (error) {
+    debugPrint('Error al cargar opciones PARE: $error');
+
+    if (!mounted) return;
+
+    setState(() {
+      _cargandoProyectos = false;
+      _errorProyectos = 'No se pudieron cargar las opciones del formulario.';
+    });
+  } finally {
+    servicio.close();
   }
+}
+
+
 
   Future<void> _pickEvidence() async {
     final source = await showModalBottomSheet<String>(
@@ -172,45 +164,79 @@ class _NewReportScreenState extends State<NewReportScreen> {
     }
   }
 
+  
   Future<void> _submitForm() async {
-    if (_isSubmitting || !_formKey.currentState!.validate()) return;
-    setState(() => _isSubmitting = true);
-    var hasSignal = false;
-    try {
-      final connectivity = await Connectivity().checkConnectivity();
-      hasSignal = connectivity.any(
-        (result) => result != ConnectivityResult.none,
+    if (_isSubmitting || !_formKey.currentState!.validate()) {
+      return;
+    }
+
+    final proyectoId = _selectedProjectId;
+    final condicionId = _selectedConditionId;
+
+    if (proyectoId == null || condicionId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Selecciona un proyecto y una condición.'),
+        ),
       );
-    } on PlatformException catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'No se pudo verificar la conexión: ${error.message ?? error.code}',
-            ),
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    final servicio = ApiService(
+      accessToken: widget.accessToken,
+    );
+
+    try {
+      final evento = await servicio.registrarEvento(
+        idTipoEvento: _tipoEventoPare,
+        condicion: condicionId,
+        descripcion: _descriptionController.text.trim(),
+        referencia: _referenceController.text.trim(),
+        idProyecto: proyectoId,
+        esParaMi: !_isThirdParty,
+        idTrabajador: _isThirdParty ? _selectedSubjectId : null,
+        evidencias: _evidence,
+      );
+
+      if (!mounted) return;
+
+      final idEvento = evento['id_evento'];
+
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Evento registrado'),
+          content: Text(
+            'Laravel confirmó el registro del evento N.º $idEvento. '
+            'El código QR se integrará en una siguiente etapa.',
           ),
-        );
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Aceptar'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo registrar el evento: $error'),
+        ),
+      );
+    } finally {
+      servicio.close();
+
+      if (mounted) {
+        setState(() => _isSubmitting = false);
       }
     }
-    final demoData = DemoData.instance;
-    demoData.addReport(
-      project: _selectedProject,
-      reference: _referenceController.text.trim(),
-      condition: _selectedCondition,
-      description: _descriptionController.text.trim(),
-      evidence: _evidence.map((file) => file.path).toList(),
-      isThirdParty: _isThirdParty,
-      subjectWorkerId: _isThirdParty ? _selectedSubjectId : null,
-      hasConnection: hasSignal,
-    );
-    final report = demoData.reports.first;
-    if (!mounted) return;
-    setState(() => _isSubmitting = false);
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => ReportQrScreen(report: report)),
-    );
   }
+
 
   @override
   Widget build(BuildContext context) {

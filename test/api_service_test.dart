@@ -5,6 +5,7 @@ import 'package:avamovil/services/api_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:image_picker/image_picker.dart';
 
 void main() {
   group('Pruebas de ApiService', () {
@@ -207,11 +208,20 @@ void main() {
           contains('application/json'),
         );
 
+        
+        expect(
+          request.headers['Content-Type'],
+          contains('application/json'),
+        );
+
+        
         final datos = jsonDecode(request.body);
 
         expect(datos['rut'], 'admin@empresa.cl');
         expect(datos['password'], 'clave_de_prueba');
         expect(datos['device_name'], 'ava_movil');
+
+
 
         return http.Response(
           jsonEncode({
@@ -292,6 +302,171 @@ void main() {
         expect(opciones['trabajadores'], isA<List>());
         expect(opciones['proyectos'], isA<List>());
         expect(opciones['proyectos'][0]['id_proyecto'], 1);
+      } finally {
+        servicio.close();
+      }
+    });
+  
+    test('Registra un evento y recibe el ID de Laravel', () async {
+      final clienteSimulado = MockClient((request) async {
+        expect(request.method, 'POST');
+
+        expect(
+          request.url.toString(),
+          'https://ejemplo.cl/api/v1/eventos',
+        );
+
+        expect(
+          request.headers['Authorization'],
+          'Bearer token_prueba',
+        );
+
+        
+        expect(
+          request.headers['content-type'],
+          contains('multipart/form-data'),
+        );
+
+        final cuerpo = request.body;
+
+        expect(cuerpo, contains('name="id_tipo_evento"'));
+        expect(cuerpo, contains('name="condicion"'));
+        expect(cuerpo, contains('name="id_proyecto"'));
+        expect(cuerpo, contains('name="es_para_mi"'));
+        expect(cuerpo, contains('Sector de mantenimiento'));
+
+
+        return http.Response(
+          jsonEncode({
+            'id_evento': 123,
+            'id_tipo_evento': 4,
+            'condicion': 1,
+            'id_proyecto': 1,
+            'estado': 'abierta',
+          }),
+          201,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+
+      final servicio = ApiService(
+        client: clienteSimulado,
+        baseUrl: 'https://ejemplo.cl/api/v1/',
+        accessToken: 'token_prueba',
+      );
+
+      try {
+        final evento = await servicio.registrarEvento(
+          idTipoEvento: 4,
+          condicion: 1,
+          descripcion: 'Condición insegura detectada',
+          referencia: 'Sector de mantenimiento',
+          idProyecto: 1,
+          esParaMi: true,
+        );
+
+        expect(evento['id_evento'], 123);
+        expect(evento['estado'], 'abierta');
+      } finally {
+        servicio.close();
+      }
+    });
+    
+    test('Envía evidencia adjunta al registrar un evento', () async {
+      final clienteSimulado = MockClient((request) async {
+        expect(request.method, 'POST');
+
+        expect(
+          request.headers['content-type'],
+          contains('multipart/form-data'),
+        );
+
+        final cuerpo = request.body;
+
+        expect(cuerpo, contains('name="evidencia[]"'));
+        expect(cuerpo, contains('filename="foto_prueba.jpg"'));
+        expect(cuerpo, contains('contenido_simulado'));
+
+        return http.Response(
+          jsonEncode({
+            'id_evento': 124,
+            'estado': 'abierta',
+          }),
+          201,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+
+      final servicio = ApiService(
+        client: clienteSimulado,
+        baseUrl: 'https://ejemplo.cl/api/v1/',
+        accessToken: 'token_prueba',
+      );
+
+      try {
+        final evento = await servicio.registrarEvento(
+          idTipoEvento: 4,
+          condicion: 1,
+          descripcion: 'Evidencia de prueba',
+          referencia: 'Sector de mantenimiento',
+          idProyecto: 1,
+          esParaMi: true,
+          evidencias: [
+            XFile.fromData(
+              utf8.encode('contenido_simulado'),
+              name: 'foto_prueba.jpg',
+              mimeType: 'image/jpeg',
+              path: 'foto_prueba.jpg',
+),
+          ],
+        );
+
+        expect(evento['id_evento'], 124);
+      } finally {
+        servicio.close();
+      }
+    });
+
+    
+    test('Obtiene el listado de eventos desde Laravel', () async {
+      final clienteSimulado = MockClient((request) async {
+        expect(request.method, 'GET');
+        expect(
+          request.url.toString(),
+          'https://ejemplo.cl/api/v1/eventos',
+        );
+        expect(
+          request.headers['Authorization'],
+          'Bearer token_prueba',
+        );
+
+        return http.Response(
+          jsonEncode([
+            {
+              'id_evento': 501,
+              'id_proyecto': 1,
+              'condicion': 1,
+              'referencia': 'PRUEBA INTEGRACIÓN AVA MÓVIL',
+              'estado': 'abierta',
+            },
+          ]),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+
+      final servicio = ApiService(
+        client: clienteSimulado,
+        baseUrl: 'https://ejemplo.cl/api/v1/',
+        accessToken: 'token_prueba',
+      );
+
+      try {
+        final eventos = await servicio.obtenerEventos();
+
+        expect(eventos.length, 1);
+        expect(eventos.first['id_evento'], 501);
+        expect(eventos.first['estado'], 'abierta');
       } finally {
         servicio.close();
       }
