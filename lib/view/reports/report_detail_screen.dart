@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:open_filex/open_filex.dart';
@@ -50,7 +51,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     }
   }
 
-  
+
   @override
   void dispose() {
     _descController.dispose();
@@ -136,6 +137,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       }
     }
   }
+
 
   
 Future<void> _closeReport() async {
@@ -623,19 +625,11 @@ Future<void> _closeReport() async {
                       child: Column(
                         children: [
                           if (isImage)
-                            Image.file(
-                              File(path),
+                            _buildEvidenceImage(
+                              path,
                               width: 104,
                               height: 88,
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  const SizedBox(
-                                    height: 88,
-                                    child: Icon(
-                                      Icons.broken_image_outlined,
-                                      size: 36,
-                                    ),
-                                  ),
                             )
                           else
                             SizedBox(
@@ -679,17 +673,98 @@ Future<void> _closeReport() async {
         }).toList(),
       );
 
+  Widget _buildEvidenceImage(
+    String path, {
+    double? width,
+    double? height,
+    required BoxFit fit,
+  }) {
+    final placeholder = SizedBox(
+      width: width,
+      height: height,
+      child: const Icon(Icons.broken_image_outlined, size: 36),
+    );
+
+    if (kIsWeb || _isRemoteEvidence(path)) {
+      final uri = _remoteEvidenceUri(path);
+      if (uri == null) return placeholder;
+
+      final token = widget.accessToken?.trim();
+      return Image.network(
+        uri.toString(),
+        headers: token == null || token.isEmpty
+            ? null
+            : {'Authorization': 'Bearer $token'},
+        width: width,
+        height: height,
+        fit: fit,
+        errorBuilder: (context, error, stackTrace) => placeholder,
+      );
+    }
+
+    return Image.file(
+      File(path),
+      width: width,
+      height: height,
+      fit: fit,
+      errorBuilder: (context, error, stackTrace) => placeholder,
+    );
+  }
+
+  bool _isRemoteEvidence(String path) {
+    final uri = Uri.tryParse(path);
+    return (uri?.scheme == 'http' || uri?.scheme == 'https') ||
+        path.startsWith('/storage/') ||
+        path.startsWith('storage/');
+  }
+
+  Uri? _remoteEvidenceUri(String path) {
+    final uri = Uri.tryParse(path);
+    if (uri == null) return null;
+    if (uri.hasScheme) {
+      return uri.scheme == 'http' || uri.scheme == 'https' ? uri : null;
+    }
+
+    final baseUri = Uri.tryParse(ApiService.configuredBaseUrl);
+    if (baseUri == null ||
+        !baseUri.hasAuthority ||
+        (baseUri.scheme != 'http' && baseUri.scheme != 'https')) {
+      return null;
+    }
+
+    final serverRoot = baseUri.replace(path: '/', query: null, fragment: null);
+    return serverRoot.resolve(path.startsWith('/') ? path.substring(1) : path);
+  }
+
+  String _evidencePath(String path) => Uri.tryParse(path)?.path ?? path;
+
   bool _isImagePath(String path) => RegExp(
     r'\.(jpe?g|png|gif|bmp|webp)$',
     caseSensitive: false,
-  ).hasMatch(path);
+  ).hasMatch(_evidencePath(path));
 
   bool _isVideoPath(String path) => RegExp(
     r'\.(mp4|mov|m4v|webm|mkv|avi)$',
     caseSensitive: false,
-  ).hasMatch(path);
+  ).hasMatch(_evidencePath(path));
 
   Future<void> _openEvidence(String path) async {
+    if (kIsWeb || _isRemoteEvidence(path)) {
+      if (!_isImagePath(path)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'En esta plataforma solo se pueden previsualizar imágenes.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      await _showImageEvidence(path);
+      return;
+    }
+
     final file = File(path);
     if (!await file.exists()) {
       if (mounted) {
@@ -701,40 +776,7 @@ Future<void> _closeReport() async {
     }
 
     if (_isImagePath(path)) {
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (context) => Dialog(
-          backgroundColor: Colors.black,
-          insetPadding: const EdgeInsets.all(12),
-          child: Stack(
-            children: [
-              Center(
-                child: InteractiveViewer(
-                  child: Image.file(
-                    file,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) => const Icon(
-                      Icons.broken_image_outlined,
-                      color: Colors.white,
-                      size: 48,
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 0,
-                right: 0,
-                child: IconButton(
-                  tooltip: 'Cerrar',
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close, color: Colors.white),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
+      await _showImageEvidence(path);
       return;
     }
 
@@ -770,6 +812,35 @@ Future<void> _closeReport() async {
       }
     }
   }
+
+  Future<void> _showImageEvidence(String path) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                child: _buildEvidenceImage(path, fit: BoxFit.contain),
+              ),
+            ),
+            Positioned(
+              top: 0,
+              right: 0,
+              child: IconButton(
+                tooltip: 'Cerrar',
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _VideoEvidenceScreen extends StatefulWidget {
@@ -793,7 +864,6 @@ class _VideoEvidenceScreenState extends State<_VideoEvidenceScreen> {
     super.dispose();
   }
 
-  
 
 
   @override
