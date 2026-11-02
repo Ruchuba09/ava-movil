@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -6,6 +8,19 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+val releaseSigningProperties = Properties()
+val releaseSigningPropertiesFile = rootProject.file("key.properties")
+if (releaseSigningPropertiesFile.exists()) {
+    releaseSigningPropertiesFile.inputStream().use {
+        releaseSigningProperties.load(it)
+    }
+}
+
+val releaseSigningValues = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+val releaseSigningConfigured = releaseSigningValues.all {
+    !releaseSigningProperties.getProperty(it).isNullOrBlank()
 }
 
 android {
@@ -25,6 +40,17 @@ android {
         jvmTarget = "17"
     }
 
+    if (releaseSigningConfigured) {
+        signingConfigs {
+            create("release") {
+                storeFile = rootProject.file(releaseSigningProperties.getProperty("storeFile"))
+                storePassword = releaseSigningProperties.getProperty("storePassword")
+                keyAlias = releaseSigningProperties.getProperty("keyAlias")
+                keyPassword = releaseSigningProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "com.ava.pare.movil"
         minSdk = flutter.minSdkVersion
@@ -35,10 +61,28 @@ android {
 
     buildTypes {
         getByName("release") {
-            signingConfig = signingConfigs.getByName("debug")
+            if (releaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 }
+
+gradle.taskGraph.whenReady {
+    val releasePackageRequested = allTasks.any { task ->
+        task.name.endsWith("Release") &&
+            (task.name.startsWith("assemble") ||
+                task.name.startsWith("bundle") ||
+                task.name.startsWith("package"))
+    }
+    if (releasePackageRequested && !releaseSigningConfigured) {
+        throw GradleException(
+            "Release signing is not configured. Add android/key.properties and a private " +
+                "release keystore; debug signing is intentionally disabled for releases."
+        )
+    }
+}
+
 flutter {
     source = "../.."
 }

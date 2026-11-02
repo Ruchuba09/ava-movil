@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:open_filex/open_filex.dart';
@@ -10,16 +11,21 @@ import 'package:avamovil/view/reports/camera_access.dart';
 import 'package:avamovil/view/reports/report_qr_screen.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
+import 'package:avamovil/services/api_service.dart';
+
 
 class ReportDetailScreen extends StatefulWidget {
   final Map<String, dynamic> report;
   final bool isLider;
+  final String? accessToken;
 
   const ReportDetailScreen({
     super.key,
     required this.report,
     this.isLider = true,
+    this.accessToken,
   });
+
 
   @override
   State<ReportDetailScreen> createState() => _ReportDetailScreenState();
@@ -30,12 +36,21 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   final TextEditingController _descController = TextEditingController();
   final List<String> _evidence = [];
   bool _showReportEvidence = false;
+  bool _showActivityLog = false;
+  bool _cerrandoEvento = false;
 
   @override
   void initState() {
     super.initState();
-    DemoData.instance.recordReportViewed(widget.report);
+    if (widget.report['id_evento'] == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          DemoData.instance.recordReportViewed(widget.report);
+        }
+      });
+    }
   }
+
 
   @override
   void dispose() {
@@ -123,32 +138,123 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     }
   }
 
-  void _closeReport() {
-    if (!_formKey.currentState!.validate()) return;
-    if (_evidence.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Adjunta al menos una evidencia para cerrar.'),
-        ),
-      );
-      return;
-    }
-    DemoData.instance.closeReport(
-      widget.report,
-      _descController.text.trim(),
-      _evidence,
-    );
+
+  
+Future<void> _closeReport() async {
+  if (_cerrandoEvento) return;
+  if (!_formKey.currentState!.validate()) return;
+
+  final id = widget.report['id_evento'];
+  final token = widget.accessToken;
+  final justificacion = _descController.text.trim();
+
+  if (id is! int || token == null || token.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Reporte cerrado correctamente')),
-    );
-    final isOffline = widget.report['hasConnectionAtCreation'] == false;
-    Navigator.of(context).pushReplacement<void, void>(
-      MaterialPageRoute<void>(
-        builder: (context) => isOffline
-            ? ReportQrScreen(report: widget.report, isNewReport: false)
-            : ReportDetailScreen(report: widget.report, isLider: false),
+      const SnackBar(
+        content: Text('No se puede cerrar: faltan datos de autenticación.'),
       ),
     );
+    return;
+  }
+
+  if (justificacion.isEmpty || justificacion.length > 500) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('La justificación debe tener entre 1 y 500 caracteres.'),
+      ),
+    );
+    return;
+  }
+
+  if (_evidence.isNotEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'El envío de evidencias de cierre aún no está integrado. '
+          'Quita los archivos para continuar.',
+        ),
+      ),
+    );
+    return;
+  }
+
+  final confirmar = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Confirmar cierre'),
+      content: Text(
+        '¿Confirmas el cierre definitivo del evento N.º $id en Laravel?',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: const Text('Confirmar cierre'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirmar != true || !mounted) return;
+
+  setState(() => _cerrandoEvento = true);
+
+  final servicio = ApiService(accessToken: token);
+
+  try {
+    final resultado = await servicio.cerrarEvento(
+      idEvento: id,
+      justificacion: justificacion,
+    );
+
+    if (!mounted) return;
+
+    if (resultado['estado'] != 'cerrada') {
+      throw StateError('Laravel no confirmó el estado cerrado.');
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Evento N.º $id cerrado en Laravel.')),
+    );
+
+    Navigator.of(context).pop(true);
+  } catch (error) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('No se pudo cerrar el evento: $error')),
+    );
+  } finally {
+    servicio.close();
+    if (mounted) {
+      setState(() => _cerrandoEvento = false);
+    }
+  }
+}
+
+  List<String> _normalizarEvidencias(dynamic valor) {
+    if (valor == null) return [];
+
+    if (valor is String) {
+      final texto = valor.trim();
+      return texto.isEmpty ? [] : [texto];
+    }
+
+    if (valor is Map) {
+      final archivo = valor['archivo'] ?? valor['ruta'] ?? valor['path'];
+      return archivo is String && archivo.trim().isNotEmpty
+          ? [archivo]
+          : [];
+    }
+
+    if (valor is List) {
+      return valor.expand((item) => _normalizarEvidencias(item)).toList();
+    }
+
+    return [];
   }
 
   @override
@@ -158,13 +264,10 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     final reportDate =
         widget.report['createdAt'] as DateTime? ??
         widget.report['date'] as DateTime;
-    final reportEvidence = (widget.report['evidence'] as List<dynamic>? ?? [])
-        .map((path) => path.toString())
-        .toList();
+    final reportEvidence = _normalizarEvidencias(widget.report['evidence']);
+
     final closeEvidence =
-        (widget.report['closeEvidence'] as List<dynamic>? ?? [])
-            .map((path) => path.toString())
-            .toList();
+        _normalizarEvidencias(widget.report['closeEvidence']);
     final activityLog =
         (widget.report['activityLog'] as List<dynamic>? ?? const [])
             .whereType<Map<String, dynamic>>()
@@ -214,7 +317,8 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                     const Divider(),
                     _buildInfoRow(
                       'Proyecto',
-                      widget.report['project'].toString(),
+                      (widget.report['project'] ?? 'Proyecto no disponible')
+                          .toString(),
                     ),
                     _buildInfoRow(
                       'Referencia (lugar)',
@@ -266,8 +370,11 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                     const SizedBox(height: 4),
                     Text(widget.report['description'].toString()),
                     if (!isOpen &&
-                        (widget.report['closeDescription'] as String)
-                            .isNotEmpty) ...[
+                        (widget.report['closeDescription']
+                                ?.toString()
+                                .trim()
+                                .isNotEmpty ??
+                            false)) ...[
                       const SizedBox(height: 16),
                       const Text(
                         'Descripción del cierre',
@@ -280,78 +387,6 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                 ),
               ),
             ),
-            if (activityLog.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Registro de actividad',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const Divider(),
-                      ...activityLog.map((activity) {
-                        final at = activity['at'];
-                        return ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(
-                            activity['type'] == 'closed'
-                                ? Icons.task_alt
-                                : activity['type'] == 'connection'
-                                ? Icons.wifi
-                                : activity['type'] == 'qr_scanned'
-                                ? Icons.qr_code_scanner
-                                : Icons.assignment_outlined,
-                            color: activity['type'] == 'closed'
-                                ? Colors.cyan
-                                : verde6Color,
-                          ),
-                          title: Text(activity['description'].toString()),
-                          subtitle: at is DateTime
-                              ? Text(_formatDateTime(at))
-                              : null,
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-            const SizedBox(height: 24),
-            OutlinedButton.icon(
-              onPressed: reportEvidence.isEmpty
-                  ? null
-                  : () => setState(
-                      () => _showReportEvidence = !_showReportEvidence,
-                    ),
-              icon: Icon(
-                _showReportEvidence
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
-              ),
-              label: Text(
-                '${_showReportEvidence ? 'Ocultar' : 'Mostrar'} evidencia del reporte (${reportEvidence.length})',
-              ),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-              ),
-            ),
-            if (_showReportEvidence && reportEvidence.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: _buildEvidenceGrid(reportEvidence),
-                ),
-              ),
-            ],
             if (!isOpen && closeEvidence.isNotEmpty) ...[
               const SizedBox(height: 16),
               const Text(
@@ -361,23 +396,8 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
               const SizedBox(height: 8),
               _buildEvidenceGrid(closeEvidence),
             ],
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      ReportQrScreen(report: widget.report, isNewReport: false),
-                ),
-              ),
-              icon: const Icon(Icons.qr_code_2),
-              label: const Text('Mostrar QR del reporte'),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-              ),
-            ),
-            const SizedBox(height: 24),
             if (isOpen && widget.isLider) ...[
+              const SizedBox(height: 24),
               const Text(
                 'Cierre de Reporte',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -446,6 +466,112 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                 ),
               ),
             ],
+            const SizedBox(height: 24),
+            if (activityLog.isNotEmpty) ...[
+              OutlinedButton.icon(
+                onPressed: () => setState(
+                  () => _showActivityLog = !_showActivityLog,
+                ),
+                icon: Icon(
+                  _showActivityLog
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                ),
+                label: Text(
+                  '${_showActivityLog ? 'Ocultar' : 'Mostrar'} registro de actividad',
+                ),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                ),
+              ),
+              if (_showActivityLog) ...[
+                const SizedBox(height: 8),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Registro de actividad',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Divider(),
+                        ...activityLog.map((activity) {
+                          final at = activity['at'];
+                          return ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(
+                              activity['type'] == 'closed'
+                                  ? Icons.task_alt
+                                  : activity['type'] == 'connection'
+                                  ? Icons.wifi
+                                  : activity['type'] == 'qr_scanned'
+                                  ? Icons.qr_code_scanner
+                                  : Icons.assignment_outlined,
+                              color: activity['type'] == 'closed'
+                                  ? Colors.cyan
+                                  : verde6Color,
+                            ),
+                            title: Text(activity['description'].toString()),
+                            subtitle: at is DateTime
+                                ? Text(_formatDateTime(at))
+                                : null,
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+            ],
+            OutlinedButton.icon(
+              onPressed: reportEvidence.isEmpty
+                  ? null
+                  : () => setState(
+                      () => _showReportEvidence = !_showReportEvidence,
+                    ),
+              icon: Icon(
+                _showReportEvidence
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+              ),
+              label: Text(
+                '${_showReportEvidence ? 'Ocultar' : 'Mostrar'} evidencia del reporte (${reportEvidence.length})',
+              ),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+            ),
+            if (_showReportEvidence && reportEvidence.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: _buildEvidenceGrid(reportEvidence),
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      ReportQrScreen(report: widget.report, isNewReport: false),
+                ),
+              ),
+              icon: const Icon(Icons.qr_code_2),
+              label: const Text('Mostrar QR del reporte'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+            ),
           ],
         ),
       ),
@@ -499,19 +625,11 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
                       child: Column(
                         children: [
                           if (isImage)
-                            Image.file(
-                              File(path),
+                            _buildEvidenceImage(
+                              path,
                               width: 104,
                               height: 88,
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  const SizedBox(
-                                    height: 88,
-                                    child: Icon(
-                                      Icons.broken_image_outlined,
-                                      size: 36,
-                                    ),
-                                  ),
                             )
                           else
                             SizedBox(
@@ -555,17 +673,98 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         }).toList(),
       );
 
+  Widget _buildEvidenceImage(
+    String path, {
+    double? width,
+    double? height,
+    required BoxFit fit,
+  }) {
+    final placeholder = SizedBox(
+      width: width,
+      height: height,
+      child: const Icon(Icons.broken_image_outlined, size: 36),
+    );
+
+    if (kIsWeb || _isRemoteEvidence(path)) {
+      final uri = _remoteEvidenceUri(path);
+      if (uri == null) return placeholder;
+
+      final token = widget.accessToken?.trim();
+      return Image.network(
+        uri.toString(),
+        headers: token == null || token.isEmpty
+            ? null
+            : {'Authorization': 'Bearer $token'},
+        width: width,
+        height: height,
+        fit: fit,
+        errorBuilder: (context, error, stackTrace) => placeholder,
+      );
+    }
+
+    return Image.file(
+      File(path),
+      width: width,
+      height: height,
+      fit: fit,
+      errorBuilder: (context, error, stackTrace) => placeholder,
+    );
+  }
+
+  bool _isRemoteEvidence(String path) {
+    final uri = Uri.tryParse(path);
+    return (uri?.scheme == 'http' || uri?.scheme == 'https') ||
+        path.startsWith('/storage/') ||
+        path.startsWith('storage/');
+  }
+
+  Uri? _remoteEvidenceUri(String path) {
+    final uri = Uri.tryParse(path);
+    if (uri == null) return null;
+    if (uri.hasScheme) {
+      return uri.scheme == 'http' || uri.scheme == 'https' ? uri : null;
+    }
+
+    final baseUri = Uri.tryParse(ApiService.configuredBaseUrl);
+    if (baseUri == null ||
+        !baseUri.hasAuthority ||
+        (baseUri.scheme != 'http' && baseUri.scheme != 'https')) {
+      return null;
+    }
+
+    final serverRoot = baseUri.replace(path: '/', query: null, fragment: null);
+    return serverRoot.resolve(path.startsWith('/') ? path.substring(1) : path);
+  }
+
+  String _evidencePath(String path) => Uri.tryParse(path)?.path ?? path;
+
   bool _isImagePath(String path) => RegExp(
     r'\.(jpe?g|png|gif|bmp|webp)$',
     caseSensitive: false,
-  ).hasMatch(path);
+  ).hasMatch(_evidencePath(path));
 
   bool _isVideoPath(String path) => RegExp(
     r'\.(mp4|mov|m4v|webm|mkv|avi)$',
     caseSensitive: false,
-  ).hasMatch(path);
+  ).hasMatch(_evidencePath(path));
 
   Future<void> _openEvidence(String path) async {
+    if (kIsWeb || _isRemoteEvidence(path)) {
+      if (!_isImagePath(path)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'En esta plataforma solo se pueden previsualizar imágenes.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      await _showImageEvidence(path);
+      return;
+    }
+
     final file = File(path);
     if (!await file.exists()) {
       if (mounted) {
@@ -577,40 +776,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     }
 
     if (_isImagePath(path)) {
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (context) => Dialog(
-          backgroundColor: Colors.black,
-          insetPadding: const EdgeInsets.all(12),
-          child: Stack(
-            children: [
-              Center(
-                child: InteractiveViewer(
-                  child: Image.file(
-                    file,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) => const Icon(
-                      Icons.broken_image_outlined,
-                      color: Colors.white,
-                      size: 48,
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 0,
-                right: 0,
-                child: IconButton(
-                  tooltip: 'Cerrar',
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close, color: Colors.white),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
+      await _showImageEvidence(path);
       return;
     }
 
@@ -646,6 +812,35 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       }
     }
   }
+
+  Future<void> _showImageEvidence(String path) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                child: _buildEvidenceImage(path, fit: BoxFit.contain),
+              ),
+            ),
+            Positioned(
+              top: 0,
+              right: 0,
+              child: IconButton(
+                tooltip: 'Cerrar',
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _VideoEvidenceScreen extends StatefulWidget {
@@ -668,6 +863,8 @@ class _VideoEvidenceScreenState extends State<_VideoEvidenceScreen> {
     _controller.dispose();
     super.dispose();
   }
+
+
 
   @override
   Widget build(BuildContext context) => Scaffold(

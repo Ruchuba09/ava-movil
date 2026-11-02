@@ -7,7 +7,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 void main() {
-  test('demo login authenticates the four configured accounts', () {
+  test('demo profiles resolve the four configured account roles', () {
     final data = DemoData.instance;
     final accounts = <String, String>{
       'admin@ejemplo.cl': 'ADMINISTRADOR',
@@ -17,22 +17,22 @@ void main() {
     };
 
     for (final account in accounts.entries) {
-      expect(data.authenticate(account.key, '1234'), isTrue);
+      data.signIn(account.key);
       expect(data.currentUser['role'], account.value);
     }
-    expect(data.authenticate('admin@ejemplo.cl', '1234'), isTrue);
+    data.signIn('admin@ejemplo.cl');
     expect(data.currentUserTeamReports.length, data.reports.length);
     expect(data.canTriggerEmergencyAlert, isFalse);
     expect(data.canScanReportQr, isFalse);
-    expect(data.authenticate('analista@ejemplo.cl', '1234'), isTrue);
+    data.signIn('analista@ejemplo.cl');
     expect(data.currentUserTeamReports.length, data.reports.length);
     expect(data.canTriggerEmergencyAlert, isFalse);
     expect(data.canScanReportQr, isFalse);
-    expect(data.authenticate('jfcua@ejemplo.cl', '1234'), isTrue);
+    data.signIn('jfcua@ejemplo.cl');
     expect(data.currentUserTeamReports.length, data.reports.length);
     expect(data.canTriggerEmergencyAlert, isTrue);
     expect(data.canScanReportQr, isTrue);
-    expect(data.authenticate('trabajador@ejemplo.cl', '1234'), isTrue);
+    data.signIn('trabajador@ejemplo.cl');
     expect(data.isWorker, isTrue);
     expect(data.canScanReportQr, isFalse);
     expect(data.currentUserTeamReports, data.currentUserReports);
@@ -48,9 +48,8 @@ void main() {
     expect(data.canTriggerEmergencyAlert, isTrue);
 
     final currentUserId = data.currentUser['id'];
-    expect(data.authenticate('admin@ejemplo.cl', 'incorrecta'), isFalse);
+    expect(() => data.signIn('desconocido@ejemplo.cl'), throwsArgumentError);
     expect(data.currentUser['id'], currentUserId);
-    expect(data.authenticate('desconocido@ejemplo.cl', '1234'), isFalse);
   });
 
   test(
@@ -134,7 +133,7 @@ void main() {
     'offline QR transfers unique reports and scan/closure trace both ways',
     () {
       final data = DemoData.instance;
-      data.authenticate('trabajador@ejemplo.cl', '1234');
+      data.signIn('trabajador@ejemplo.cl');
       data.addReport(
         project: DemoData.projects.first,
         reference: 'Acceso norte',
@@ -153,7 +152,7 @@ void main() {
       expect(workerQr['evidenceCount'], 1);
 
       data.reports.remove(workerReport);
-      data.authenticate('jfcua@ejemplo.cl', '1234');
+      data.signIn('jfcua@ejemplo.cl');
       final supervisorReport = data.importReportFromQr(workerQr);
       expect(supervisorReport['id'], workerReport['id']);
       expect(supervisorReport['reference'], 'Acceso norte');
@@ -170,7 +169,7 @@ void main() {
 
       data.reports.remove(supervisorReport);
       data.reports.add(workerReport);
-      data.authenticate('trabajador@ejemplo.cl', '1234');
+      data.signIn('trabajador@ejemplo.cl');
       final updatedWorkerReport = data.importReportFromQr(supervisorQr);
       expect(updatedWorkerReport, same(workerReport));
       expect(updatedWorkerReport['status'], 'CERRADA');
@@ -256,9 +255,13 @@ void main() {
 
   testWidgets('workers cannot open the QR scanner directly', (tester) async {
     final data = DemoData.instance;
-    data.authenticate('trabajador@ejemplo.cl', '1234');
+    data.signIn('trabajador@ejemplo.cl');
 
-    await tester.pumpWidget(const MaterialApp(home: ReportQrScannerScreen()));
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: ReportQrScannerScreen(accessToken: 'token-de-prueba'),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(
@@ -309,11 +312,11 @@ void main() {
       'analista@ejemplo.cl',
       'jfcua@ejemplo.cl',
     ]) {
-      expect(data.authenticate(email, '1234'), isTrue);
+      data.signIn(email);
       expect(data.currentUserTeamReports, data.reports);
     }
 
-    expect(data.authenticate('trabajador@ejemplo.cl', '1234'), isTrue);
+    data.signIn('trabajador@ejemplo.cl');
     expect(data.currentUserTeamReports, data.currentUserReports);
     expect(data.currentUserReports.length, lessThan(data.reports.length));
   });
@@ -322,7 +325,7 @@ void main() {
     'emergency alert records its recipient and notification audit trail',
     () {
       final data = DemoData.instance;
-      data.authenticate('trabajador@ejemplo.cl', '1234');
+      data.signIn('trabajador@ejemplo.cl');
 
       final alert = data.triggerEmergencyAlert();
       expect(alert['sender'], 'Juan Pérez');
@@ -337,14 +340,14 @@ void main() {
       expect(notification['read'], isFalse);
       expect(notification['emergencyAlertId'], alert['id']);
 
-      data.authenticate('jfcua@ejemplo.cl', '1234');
+      data.signIn('jfcua@ejemplo.cl');
       expect(data.currentUserNotifications, contains(notification));
       data.markNotificationRead(notification);
       expect(notification['read'], isTrue);
       expect(alert['activityLog'], hasLength(3));
       expect(alert['activityLog'].last['type'], 'notification_viewed');
 
-      data.authenticate('jfcua@ejemplo.cl', '1234');
+      data.signIn('jfcua@ejemplo.cl');
       final supervisorAlert = data.triggerEmergencyAlert();
       expect(supervisorAlert['recipient'], 'Administrador');
       expect(supervisorAlert['recipientId'], 3);
@@ -370,4 +373,33 @@ void main() {
       '#closed-2',
     ]);
   });
+
+  test(
+    'API-authenticated worker and supervisor roles select correct access',
+    () {
+      final data = DemoData.instance;
+
+      data.setAuthenticatedUser({
+        'id': 42,
+        'name': 'Trabajador API',
+        'email': 'trabajador@empresa.cl',
+        'role': {'name': 'Operador'},
+      }, fallbackEmail: 'trabajador@empresa.cl');
+      expect(data.isWorker, isTrue);
+      expect(data.canScanReportQr, isFalse);
+
+      data.setAuthenticatedUser({
+        'id': 7,
+        'name': 'Jefe API',
+        'email': 'jefe@empresa.cl',
+        'roles': [
+          {'name': 'JEFE DE CUADRILLA'},
+        ],
+      }, fallbackEmail: 'jefe@empresa.cl');
+      expect(data.isWorker, isFalse);
+      expect(data.canScanReportQr, isTrue);
+
+      data.signIn('jfcua@ejemplo.cl');
+    },
+  );
 }

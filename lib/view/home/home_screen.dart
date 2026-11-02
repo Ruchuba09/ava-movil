@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:google_nav_bar/google_nav_bar.dart';
 import 'package:avamovil/dev/demo_data.dart';
@@ -12,9 +11,15 @@ import 'package:avamovil/view/reports/report_detail_screen.dart';
 import 'package:avamovil/view/reports/report_qr_scanner_screen.dart';
 import 'package:avamovil/view/permissions/permissions_screen.dart';
 import 'package:avamovil/controller/theme_controller.dart';
+import 'package:avamovil/services/api_service.dart';
+import 'package:avamovil/services/offline_store.dart';
+import 'package:avamovil/services/offline_sync_service.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final String accessToken;
+  final String? userKey;
+
+  const HomeScreen({super.key, required this.accessToken, this.userKey});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -23,11 +28,98 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   bool _showPermissions = false;
+  bool _isSyncing = false;
+  final OfflineStore _offlineStore = OfflineStore();
 
-  static const List<Widget> _widgetOptions = <Widget>[
-    NewReportScreen(),
-    ReportsScreen(onlyCurrentTeam: true),
-    ReportsScreen(onlyCurrentUser: true),
+  String get _userKey =>
+      widget.userKey ?? OfflineStore.userKeyFor(DemoData.instance.currentUser);
+
+  Future<void> _comprobarProyectos() async {
+    final servicio = ApiService(accessToken: widget.accessToken);
+
+    try {
+      final proyectos = await servicio.obtenerProyectos();
+      await _offlineStore.saveJson(
+        userKey: _userKey,
+        key: OfflineStore.projectsKey,
+        value: proyectos,
+      );
+
+      if (!mounted) return;
+
+      debugPrint(
+        'Proyectos reales recibidos desde Laravel: ${proyectos.length}',
+      );
+    } on ApiException catch (error) {
+      debugPrint('Error al consultar proyectos: HTTP ${error.statusCode}');
+    } catch (error) {
+      debugPrint('Error de conexión con proyectos: $error');
+      try {
+        final cachedProjects = await _offlineStore.readJson(
+          userKey: _userKey,
+          key: OfflineStore.projectsKey,
+        );
+        if (cachedProjects != null) {
+          debugPrint('Proyectos cargados desde la caché local.');
+        }
+      } catch (cacheError) {
+        debugPrint('No se pudieron leer los proyectos locales: $cacheError');
+      }
+    } finally {
+      servicio.close();
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _comprobarProyectos();
+    _syncPendingReports();
+  }
+
+  Future<void> _syncPendingReports() async {
+    if (_isSyncing) return;
+    setState(() => _isSyncing = true);
+    try {
+      final result = await const OfflineSyncService().synchronize(
+        userKey: _userKey,
+        accessToken: widget.accessToken,
+      );
+      if (mounted && (result.synchronized > 0 || result.failed > 0)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${result.synchronized} reporte(s) sincronizado(s); '
+              '${result.failed} pendiente(s) por error.',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      debugPrint('No se pudieron sincronizar reportes locales: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error al sincronizar: $error')));
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
+  }
+
+  List<Widget> get _widgetOptions => [
+    NewReportScreen(accessToken: widget.accessToken, userKey: _userKey),
+    ReportsScreen(
+      accessToken: widget.accessToken,
+      userKey: _userKey,
+      onlyCurrentTeam: true,
+    ),
+    ReportsScreen(
+      accessToken: widget.accessToken,
+      userKey: _userKey,
+      onlyCurrentUser: true,
+      canCloseReports: false,
+    ),
   ];
 
   Future<void> _showNotifications() async {
@@ -117,6 +209,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
         ),
         actions: [
+          IconButton(
+            tooltip: 'Sincronizar reportes pendientes',
+            onPressed: _isSyncing ? null : _syncPendingReports,
+            icon: _isSyncing
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.cloud_sync_outlined),
+          ),
           if (notifications.any((notification) => notification['read'] == true))
             TextButton.icon(
               onPressed: () {
@@ -179,24 +282,24 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _triggerEmergencyAlert() {
+  Future<void> _signOut() async {
     try {
-      final alert = DemoData.instance.triggerEmergencyAlert();
-      HapticFeedback.heavyImpact();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Alerta registrada para ${alert['recipient']}.'),
-          backgroundColor: Colors.red.shade800,
-        ),
-      );
-    } on StateError catch (error) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+      await OfflineSessionStore().clear();
+    } catch (error) {
+      debugPrint('No se pudo borrar la sesión offline: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No se pudo cerrar la sesión almacenada de forma segura.',
+            ),
+          ),
+        );
+      }
+      return;
     }
-  }
+    if (!mounted) return;
 
-  void _signOut() {
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (context) => const LoginScreen()),
       (route) => false,
@@ -209,7 +312,8 @@ class _HomeScreenState extends State<HomeScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute<void>(
-        builder: (context) => const ReportQrScannerScreen(),
+        builder: (context) =>
+            ReportQrScannerScreen(accessToken: widget.accessToken),
       ),
     );
   }
@@ -223,9 +327,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final isWorker = demoData.isWorker;
     final reportListTitle = isWorker ? 'Mis Reportes' : 'Todos los reportes';
     final pages = isWorker
-        ? const <Widget>[
-            NewReportScreen(),
-            ReportsScreen(onlyCurrentUser: true),
+        ? <Widget>[
+            NewReportScreen(accessToken: widget.accessToken, userKey: _userKey),
+            ReportsScreen(
+              accessToken: widget.accessToken,
+              userKey: _userKey,
+              onlyCurrentUser: true,
+            ),
           ]
         : _widgetOptions;
     final tabs = isWorker
@@ -266,9 +374,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 fit: BoxFit.contain,
               ),
             ),
-            const SizedBox(width: 10),
-            if (demoData.canTriggerEmergencyAlert)
-              _EmergencyHoldButton(onTriggered: _triggerEmergencyAlert),
           ],
         ),
         actions: [
@@ -522,20 +627,17 @@ class _HomeScreenState extends State<HomeScreen> {
                             );
                           },
                         ),
-                        ListTile(
-                          leading: const Icon(Icons.logout),
-                          title: const Text('Cerrar sesión'),
-                          onTap: _signOut,
-                        ),
                       ],
                     ),
                   ),
                 ],
               ),
             ),
+
       body: _showPermissions && !isWorker
-          ? const PermissionsScreen()
+          ? PermissionsScreen(accessToken: widget.accessToken)
           : pages.elementAt(_selectedIndex),
+
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Theme.of(context).scaffoldBackgroundColor,
@@ -573,118 +675,4 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-}
-
-class _EmergencyHoldButton extends StatefulWidget {
-  final VoidCallback onTriggered;
-
-  const _EmergencyHoldButton({required this.onTriggered});
-
-  @override
-  State<_EmergencyHoldButton> createState() => _EmergencyHoldButtonState();
-}
-
-class _EmergencyHoldButtonState extends State<_EmergencyHoldButton>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _holdController;
-  bool _isHolding = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _holdController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 3),
-    )..addStatusListener(_onHoldStatusChanged);
-  }
-
-  void _onHoldStatusChanged(AnimationStatus status) {
-    if (status != AnimationStatus.completed || !_isHolding) return;
-    _isHolding = false;
-    widget.onTriggered();
-    _holdController.value = 0;
-  }
-
-  void _startHold(PointerDownEvent _) {
-    if (_isHolding) return;
-    _isHolding = true;
-    _holdController.forward(from: 0);
-  }
-
-  void _cancelHold(PointerEvent _) {
-    if (!_isHolding) return;
-    _isHolding = false;
-    _holdController.stop();
-    _holdController.value = 0;
-  }
-
-  @override
-  void dispose() {
-    _holdController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => Tooltip(
-    message: 'Mantén presionado 3 segundos para avisar a tu encargado',
-    child: Semantics(
-      label: 'SOS. Mantén presionado tres segundos para avisar a tu encargado',
-      button: true,
-      child: Listener(
-        onPointerDown: _startHold,
-        onPointerUp: _cancelHold,
-        onPointerCancel: _cancelHold,
-        child: SizedBox(
-          width: 76,
-          height: 48,
-          child: AnimatedBuilder(
-            animation: _holdController,
-            builder: (context, child) => Stack(
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).scaffoldBackgroundColor,
-                    borderRadius: BorderRadius.circular(22),
-                    border: Border.all(
-                      color: const Color(0xFFC62828),
-                      width: 2,
-                    ),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'SOS',
-                      style: TextStyle(
-                        color: Color(0xFFC62828),
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: 8,
-                  right: 8,
-                  bottom: 4,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(2),
-                    child: LinearProgressIndicator(
-                      value: _holdController.value,
-                      minHeight: 3,
-                      backgroundColor: const Color(
-                        0xFFC62828,
-                      ).withValues(alpha: 0.15),
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                        Color(0xFFC62828),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
 }
