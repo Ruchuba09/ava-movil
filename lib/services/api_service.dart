@@ -257,12 +257,21 @@ class ApiService {
     return body;
   }
 
-  Map<String, String> _headers() {
+  Map<String, String> _baseHeaders() {
     return {
       'Accept': 'application/json',
       if (accessToken != null && accessToken!.trim().isNotEmpty)
         'Authorization': 'Bearer $accessToken',
     };
+  }
+
+  Map<String, String> _headers() {
+    final headers = _baseHeaders()..remove('Authorization');
+    final token = accessToken?.trim();
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+    return headers;
   }
 
   Uri _endpoint(String resource) {

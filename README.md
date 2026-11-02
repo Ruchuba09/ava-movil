@@ -74,6 +74,43 @@ flutter run
 flutter run
 ```
 
+### Publicar Android
+
+Los APK/AAB de release no se firman con la clave debug. Guarda las propiedades
+de firma en `android/key.properties` (archivo ignorado por Git) y conserva el
+keystore fuera del repositorio:
+
+```properties
+storeFile=C:/ruta-segura/ava-upload-key.jks
+storePassword=...
+keyAlias=...
+keyPassword=...
+```
+
+La ruta de `storeFile` puede ser absoluta o relativa a `android/`. Sin las
+cuatro propiedades, las tareas `assembleRelease` y `bundleRelease` fallan en
+lugar de producir una publicación con firma debug. No compartas ni subas el
+keystore o sus contraseñas.
+
+### Publicar Windows
+
+Instala el Windows SDK (incluido con Visual Studio Build Tools) y un certificado
+Authenticode de firma de código emitido por una autoridad de confianza.
+Importa el certificado y su clave privada al almacén **Usuario actual > Personal**
+de la cuenta que compila, y configura su huella SHA-1 como
+`AVA_CODESIGN_THUMBPRINT`. Después, desde PowerShell ejecuta:
+
+```powershell
+.\windows\build_signed_release.ps1
+```
+
+El script compila en release, firma el ejecutable principal con SHA-256 y una
+marca de tiempo, y verifica la firma. Requiere `signtool.exe` en `PATH`. No
+incluyas certificados ni claves privadas en el repositorio. La firma identifica
+al editor y mejora la confianza de distribución, pero no garantiza por sí sola
+que SmartScreen elimine todos los avisos; ante una detección concreta, envía a
+Microsoft el archivo exacto y el nombre de detección para su análisis.
+
 ### Modo debug
 
 Mientras la app está corriendo:

@@ -12,14 +12,14 @@ import 'package:avamovil/view/reports/report_qr_scanner_screen.dart';
 import 'package:avamovil/view/permissions/permissions_screen.dart';
 import 'package:avamovil/controller/theme_controller.dart';
 import 'package:avamovil/services/api_service.dart';
+import 'package:avamovil/services/offline_store.dart';
+import 'package:avamovil/services/offline_sync_service.dart';
 
 class HomeScreen extends StatefulWidget {
   final String accessToken;
+  final String? userKey;
 
-  const HomeScreen({
-    super.key,
-    required this.accessToken,
-  });
+  const HomeScreen({super.key, required this.accessToken, this.userKey});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -28,15 +28,22 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   bool _showPermissions = false;
+  bool _isSyncing = false;
+  final OfflineStore _offlineStore = OfflineStore();
 
-  
+  String get _userKey =>
+      widget.userKey ?? OfflineStore.userKeyFor(DemoData.instance.currentUser);
+
   Future<void> _comprobarProyectos() async {
-    final servicio = ApiService(
-      accessToken: widget.accessToken,
-    );
+    final servicio = ApiService(accessToken: widget.accessToken);
 
     try {
       final proyectos = await servicio.obtenerProyectos();
+      await _offlineStore.saveJson(
+        userKey: _userKey,
+        key: OfflineStore.projectsKey,
+        value: proyectos,
+      );
 
       if (!mounted) return;
 
@@ -44,36 +51,75 @@ class _HomeScreenState extends State<HomeScreen> {
         'Proyectos reales recibidos desde Laravel: ${proyectos.length}',
       );
     } on ApiException catch (error) {
-      debugPrint(
-        'Error al consultar proyectos: HTTP ${error.statusCode}',
-      );
+      debugPrint('Error al consultar proyectos: HTTP ${error.statusCode}');
     } catch (error) {
       debugPrint('Error de conexión con proyectos: $error');
+      try {
+        final cachedProjects = await _offlineStore.readJson(
+          userKey: _userKey,
+          key: OfflineStore.projectsKey,
+        );
+        if (cachedProjects != null) {
+          debugPrint('Proyectos cargados desde la caché local.');
+        }
+      } catch (cacheError) {
+        debugPrint('No se pudieron leer los proyectos locales: $cacheError');
+      }
     } finally {
       servicio.close();
     }
-  } 
+  }
 
   @override
   void initState() {
     super.initState();
     _comprobarProyectos();
+    _syncPendingReports();
   }
 
+  Future<void> _syncPendingReports() async {
+    if (_isSyncing) return;
+    setState(() => _isSyncing = true);
+    try {
+      final result = await const OfflineSyncService().synchronize(
+        userKey: _userKey,
+        accessToken: widget.accessToken,
+      );
+      if (mounted && (result.synchronized > 0 || result.failed > 0)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${result.synchronized} reporte(s) sincronizado(s); '
+              '${result.failed} pendiente(s) por error.',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      debugPrint('No se pudieron sincronizar reportes locales: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error al sincronizar: $error')));
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
+  }
 
   List<Widget> get _widgetOptions => [
-    NewReportScreen(
+    NewReportScreen(accessToken: widget.accessToken, userKey: _userKey),
+    ReportsScreen(
       accessToken: widget.accessToken,
+      userKey: _userKey,
+      onlyCurrentTeam: true,
     ),
     ReportsScreen(
-    accessToken: widget.accessToken,
-    onlyCurrentTeam: true,
-  ),
-  ReportsScreen(
-    accessToken: widget.accessToken,
-    onlyCurrentUser: true,
-    canCloseReports: false,
-  ),
+      accessToken: widget.accessToken,
+      userKey: _userKey,
+      onlyCurrentUser: true,
+      canCloseReports: false,
+    ),
   ];
 
   Future<void> _showNotifications() async {
@@ -163,6 +209,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
         ),
         actions: [
+          IconButton(
+            tooltip: 'Sincronizar reportes pendientes',
+            onPressed: _isSyncing ? null : _syncPendingReports,
+            icon: _isSyncing
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.cloud_sync_outlined),
+          ),
           if (notifications.any((notification) => notification['read'] == true))
             TextButton.icon(
               onPressed: () {
@@ -225,7 +282,24 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _signOut() {
+  Future<void> _signOut() async {
+    try {
+      await OfflineSessionStore().clear();
+    } catch (error) {
+      debugPrint('No se pudo borrar la sesión offline: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No se pudo cerrar la sesión almacenada de forma segura.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
+
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (context) => const LoginScreen()),
       (route) => false,
@@ -238,9 +312,8 @@ class _HomeScreenState extends State<HomeScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute<void>(
-        builder: (context) => ReportQrScannerScreen(
-          accessToken: widget.accessToken,
-        ),
+        builder: (context) =>
+            ReportQrScannerScreen(accessToken: widget.accessToken),
       ),
     );
   }
@@ -254,16 +327,15 @@ class _HomeScreenState extends State<HomeScreen> {
     final isWorker = demoData.isWorker;
     final reportListTitle = isWorker ? 'Mis Reportes' : 'Todos los reportes';
     final pages = isWorker
-    ? <Widget>[
-        NewReportScreen(
-          accessToken: widget.accessToken,
-        ),
-        ReportsScreen(
-          accessToken: widget.accessToken,
-          onlyCurrentUser: true,
-        ),
-      ]
-    : _widgetOptions;
+        ? <Widget>[
+            NewReportScreen(accessToken: widget.accessToken, userKey: _userKey),
+            ReportsScreen(
+              accessToken: widget.accessToken,
+              userKey: _userKey,
+              onlyCurrentUser: true,
+            ),
+          ]
+        : _widgetOptions;
     final tabs = isWorker
         ? const [
             GButton(icon: Icons.add_box, text: 'Crear Tarjeta'),
@@ -561,12 +633,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-      
-body: _showPermissions && !isWorker
-    ? PermissionsScreen(
-        accessToken: widget.accessToken,
-      )
-    : pages.elementAt(_selectedIndex),
+
+      body: _showPermissions && !isWorker
+          ? PermissionsScreen(accessToken: widget.accessToken)
+          : pages.elementAt(_selectedIndex),
 
       bottomNavigationBar: Container(
         decoration: BoxDecoration(

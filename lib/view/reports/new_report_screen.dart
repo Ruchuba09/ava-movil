@@ -1,3 +1,9 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:avamovil/database/avamovil_db.dart';
+import 'package:avamovil/database/sync_queue.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,20 +14,18 @@ import 'package:avamovil/view/reports/report_qr_screen.dart';
 import 'package:avamovil/view/widgets/selection_field.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:avamovil/services/api_service.dart';
-
+import 'package:avamovil/services/offline_store.dart';
+import 'package:http/http.dart' as http;
 
 class NewReportScreen extends StatefulWidget {
   final String accessToken;
+  final String? userKey;
 
-  const NewReportScreen({
-    super.key,
-    required this.accessToken,
-  });
+  const NewReportScreen({super.key, required this.accessToken, this.userKey});
 
   @override
   State<NewReportScreen> createState() => _NewReportScreenState();
 }
-
 
 class _NewReportScreenState extends State<NewReportScreen> {
   final _formKey = GlobalKey<FormState>();
@@ -39,114 +43,154 @@ class _NewReportScreenState extends State<NewReportScreen> {
   bool _isThirdParty = false;
   bool _isSubmitting = false;
   int _tipoEventoPare = 4;
+  final OfflineStore _offlineStore = OfflineStore();
+
+  String get _userKey =>
+      widget.userKey ?? OfflineStore.userKeyFor(DemoData.instance.currentUser);
 
   List<Map<String, dynamic>> get _condicionesPare {
     if (_condicionesReales.isNotEmpty) return _condicionesReales;
-    return DemoData.conditions.asMap().entries
-        .map(
-          (entry) => {
-            'id_condicion': entry.key + 1,
-            'nombre': entry.value,
-          },
-        )
+    return DemoData.conditions
+        .asMap()
+        .entries
+        .map((entry) => {'id_condicion': entry.key + 1, 'nombre': entry.value})
         .toList();
   }
+
   @override
   void dispose() {
     _referenceController.dispose();
     _descriptionController.dispose();
     super.dispose();
   }
-    @override
+
+  @override
   void initState() {
     super.initState();
     _cargarProyectos();
   }
-  
-  
 
-Future<void> _cargarProyectos() async {
-  final servicio = ApiService(
-    accessToken: widget.accessToken,
-  );
+  Future<void> _cargarProyectos() async {
+    final servicio = ApiService(accessToken: widget.accessToken);
 
-  try {
-    final opciones = await servicio.obtenerOpcionesEventos();
+    try {
+      final opciones = await servicio.obtenerOpcionesEventos();
+      _applyEventOptions(opciones);
+      try {
+        await _offlineStore.saveJson(
+          userKey: _userKey,
+          key: OfflineStore.eventOptionsKey,
+          value: opciones,
+        );
+      } catch (error) {
+        debugPrint(
+          'No se pudieron guardar localmente las opciones PARE: $error',
+        );
+      }
+    } catch (error) {
+      debugPrint('Error al cargar opciones PARE: $error');
+      if (error is ApiException &&
+          (error.statusCode == 401 || error.statusCode == 403)) {
+        if (mounted) {
+          setState(() {
+            _cargandoProyectos = false;
+            _errorProyectos =
+                'La sesión ya no está autorizada. Inicia sesión en línea.';
+          });
+        }
+        return;
+      }
 
-  final proyectos = ((opciones['proyectos'] as List?) ?? const [])
-        .map((item) => Map<String, dynamic>.from(item as Map))
-        .toList();
-
-  final trabajadores = ((opciones['trabajadores'] as List?) ?? const [])
-        .map((item) => Map<String, dynamic>.from(item as Map))
-        .toList();
-  final tiposEvento = ((opciones['tiposEvento'] as List?) ?? const [])
-      .whereType<Map>()
-      .map((item) => Map<String, dynamic>.from(item))
-      .toList();
-  final tiposParePorNombre = tiposEvento.where((tipo) {
-    final nombre = (
-      tipo['nombre'] ??
-      tipo['name'] ??
-      tipo['descripcion'] ??
-      ''
-    ).toString();
-    return nombre.toLowerCase().contains('pare');
-  });
-  final tiposParePorId = tiposEvento.where(
-    (tipo) => num.tryParse('${tipo['id_tipo_evento']}') == 4,
-  );
-  final tipoPare = tiposParePorNombre.isNotEmpty
-      ? tiposParePorNombre.first
-      : tiposParePorId.isNotEmpty
-      ? tiposParePorId.first
-      : null;
-  final condiciones = (opciones['condiciones'] ??
-          opciones['condicionesPare'] ??
-          opciones['condiciones_pare'])
-      as List?;
-  final condicionesReales = (condiciones ?? const [])
-      .whereType<Map>()
-      .map((item) => Map<String, dynamic>.from(item))
-      .where(
-        (item) =>
-            (item['id_condicion'] ?? item['id']) is num &&
-            (item['nombre'] ?? item['descripcion'] ?? item['detalle']) is String,
-      )
-      .toList();
-
-  if (!mounted) return;
-
-  setState(() {
-    _proyectosReales = proyectos;
-    _trabajadoresReales = trabajadores;
-    _condicionesReales = condicionesReales;
-    if (tipoPare?['id_tipo_evento'] is num) {
-      _tipoEventoPare = (tipoPare!['id_tipo_evento'] as num).toInt();
+      try {
+        final cachedOptions = await _offlineStore.readJson(
+          userKey: _userKey,
+          key: OfflineStore.eventOptionsKey,
+        );
+        if (cachedOptions is Map) {
+          _applyEventOptions(Map<String, dynamic>.from(cachedOptions));
+          debugPrint('Opciones PARE cargadas desde la caché local.');
+        } else if (mounted) {
+          setState(() {
+            _cargandoProyectos = false;
+            _errorProyectos =
+                'No hay opciones sincronizadas para usar offline.';
+          });
+        }
+      } catch (cacheError) {
+        debugPrint(
+          'No se pudieron leer las opciones PARE locales: $cacheError',
+        );
+        if (mounted) {
+          setState(() {
+            _cargandoProyectos = false;
+            _errorProyectos = 'No se pudieron leer las opciones guardadas.';
+          });
+        }
+      }
+    } finally {
+      servicio.close();
     }
-    _cargandoProyectos = false;
-    _errorProyectos = null;
-    });
+  }
 
-    debugPrint(
-      'Opciones PARE: ${proyectos.length} proyectos, '
-      '${trabajadores.length} trabajadores.',
+  void _applyEventOptions(Map<String, dynamic> opciones) {
+    final proyectos = ((opciones['proyectos'] as List?) ?? const [])
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
+
+    final trabajadores = ((opciones['trabajadores'] as List?) ?? const [])
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
+    final tiposEvento = ((opciones['tiposEvento'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+    final tiposParePorNombre = tiposEvento.where((tipo) {
+      final nombre =
+          (tipo['nombre'] ?? tipo['name'] ?? tipo['descripcion'] ?? '')
+              .toString();
+      return nombre.toLowerCase().contains('pare');
+    });
+    final tiposParePorId = tiposEvento.where(
+      (tipo) => num.tryParse('${tipo['id_tipo_evento']}') == 4,
     );
-  } catch (error) {
-    debugPrint('Error al cargar opciones PARE: $error');
+    final tipoPare = tiposParePorNombre.isNotEmpty
+        ? tiposParePorNombre.first
+        : tiposParePorId.isNotEmpty
+        ? tiposParePorId.first
+        : null;
+    final condiciones =
+        (opciones['condiciones'] ??
+                opciones['condicionesPare'] ??
+                opciones['condiciones_pare'])
+            as List?;
+    final condicionesReales = (condiciones ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .where(
+          (item) =>
+              (item['id_condicion'] ?? item['id']) is num &&
+              (item['nombre'] ?? item['descripcion'] ?? item['detalle'])
+                  is String,
+        )
+        .toList();
 
     if (!mounted) return;
 
     setState(() {
+      _proyectosReales = proyectos;
+      _trabajadoresReales = trabajadores;
+      _condicionesReales = condicionesReales;
+      if (tipoPare?['id_tipo_evento'] is num) {
+        _tipoEventoPare = (tipoPare!['id_tipo_evento'] as num).toInt();
+      }
       _cargandoProyectos = false;
-      _errorProyectos = 'No se pudieron cargar las opciones del formulario.';
+      _errorProyectos = null;
     });
-  } finally {
-    servicio.close();
+    debugPrint(
+      'Opciones PARE disponibles: ${proyectos.length} proyectos, '
+      '${trabajadores.length} trabajadores.',
+    );
   }
-}
-
-
 
   Future<void> _pickEvidence() async {
     final source = await showModalBottomSheet<String>(
@@ -216,7 +260,6 @@ Future<void> _cargarProyectos() async {
     }
   }
 
-  
   Future<void> _submitForm() async {
     if (_isSubmitting || !_formKey.currentState!.validate()) {
       return;
@@ -236,9 +279,7 @@ Future<void> _cargarProyectos() async {
 
     setState(() => _isSubmitting = true);
 
-    final servicio = ApiService(
-      accessToken: widget.accessToken,
-    );
+    final servicio = ApiService(accessToken: widget.accessToken);
 
     try {
       final evento = await servicio.registrarEvento(
@@ -281,19 +322,19 @@ Future<void> _cargarProyectos() async {
 
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (context) => ReportQrScreen(
-            report: reporte,
-            isNewReport: true,
-          ),
+          builder: (context) =>
+              ReportQrScreen(report: reporte, isNewReport: true),
         ),
       );
+    } on SocketException catch (error) {
+      await _queueReportOffline(proyectoId, condicionId, error);
+    } on http.ClientException catch (error) {
+      await _queueReportOffline(proyectoId, condicionId, error);
     } catch (error) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('No se pudo registrar el evento: $error'),
-        ),
+        SnackBar(content: Text('No se pudo registrar el evento: $error')),
       );
     } finally {
       servicio.close();
@@ -304,6 +345,78 @@ Future<void> _cargarProyectos() async {
     }
   }
 
+  Future<void> _queueReportOffline(
+    int projectId,
+    int conditionId,
+    Object networkError,
+  ) async {
+    try {
+      final project = _proyectosReales.firstWhere(
+        (item) => item['id_proyecto'] == projectId,
+      );
+      final evidence = <Map<String, Object?>>[];
+      for (final file in _evidence) {
+        final bytes = await file.readAsBytes();
+        if (bytes.length > 5 * 1024 * 1024) {
+          throw ArgumentError('Cada evidencia debe pesar máximo 5 MB.');
+        }
+        evidence.add({'name': file.name, 'bytes_base64': base64Encode(bytes)});
+      }
+
+      final payload = <String, Object?>{
+        'user_key': _userKey,
+        'id_tipo_evento': _tipoEventoPare,
+        'condicion': conditionId,
+        'descripcion': _descriptionController.text.trim(),
+        'referencia': _referenceController.text.trim(),
+        'id_proyecto': projectId,
+        'proyecto_nombre': project['nombre'],
+        'es_para_mi': !_isThirdParty,
+        if (_isThirdParty) 'id_trabajador': _selectedSubjectId,
+        'evidencias': evidence,
+        'fecha_creacion_local': DateTime.now().toUtc().toIso8601String(),
+      };
+
+      final db = await AvaMovilDatabase.instance.database;
+      await db.transaction((transaction) async {
+        await const SyncQueue().enqueue(
+          executor: transaction,
+          entity: 'eventos',
+          operation: 'crear',
+          payload: payload,
+        );
+      });
+
+      debugPrint('Reporte guardado para sincronizar luego: $networkError');
+      if (!mounted) return;
+
+      _referenceController.clear();
+      _descriptionController.clear();
+      setState(() {
+        _selectedProjectId = null;
+        _selectedConditionId = null;
+        _selectedSubjectId = null;
+        _isThirdParty = false;
+        _evidence.clear();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Reporte guardado en este dispositivo. Se sincronizará al recuperar conexión.',
+          ),
+        ),
+      );
+    } catch (error) {
+      debugPrint('No se pudo guardar el reporte offline: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudo guardar el reporte local: $error'),
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -360,38 +473,32 @@ Future<void> _cargarProyectos() async {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            
-if (_cargandoProyectos)
-  const Center(
-    child: CircularProgressIndicator(),
-  )
-else if (_errorProyectos != null)
-  Text(
-    _errorProyectos!,
-    style: const TextStyle(color: Colors.red),
-  )
-else
-  SelectionField<int>(
-    label: 'PROYECTO',
-    hint: 'Selecciona un proyecto',
-    value: _selectedProjectId,
-    options: _proyectosReales
-        .map(
-          (proyecto) => SelectionOption<int>(
-            value: proyecto['id_proyecto'] as int,
-            label: proyecto['nombre'] as String,
-          ),
-        )
-        .toList(),
-    onChanged: (value) {
-      setState(() {
-        _selectedProjectId = value;
-        _selectedSubjectId = null;
-      });
-    },
-    validator: (value) =>
-        value == null ? 'Selecciona un proyecto' : null,
-  ),
+            if (_cargandoProyectos)
+              const Center(child: CircularProgressIndicator())
+            else if (_errorProyectos != null)
+              Text(_errorProyectos!, style: const TextStyle(color: Colors.red))
+            else
+              SelectionField<int>(
+                label: 'PROYECTO',
+                hint: 'Selecciona un proyecto',
+                value: _selectedProjectId,
+                options: _proyectosReales
+                    .map(
+                      (proyecto) => SelectionOption<int>(
+                        value: proyecto['id_proyecto'] as int,
+                        label: proyecto['nombre'] as String,
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedProjectId = value;
+                    _selectedSubjectId = null;
+                  });
+                },
+                validator: (value) =>
+                    value == null ? 'Selecciona un proyecto' : null,
+              ),
 
             const SizedBox(height: 14),
             const Text(
@@ -425,39 +532,38 @@ else
             ),
             if (_isThirdParty) ...[
               const SizedBox(height: 10),
-              
-SelectionField<int>(
-  key: ValueKey(_selectedProjectId),
-  label: 'PERSONA REPORTADA',
-  hint: 'Selecciona a la persona reportada',
-  value: _selectedSubjectId,
-  options: _trabajadoresReales
-      .where((trabajador) {
-        final proyectos = trabajador['proyectos'] as List? ?? [];
 
-        return proyectos.any(
-          (proyecto) =>
-              proyecto['id_proyecto'] == _selectedProjectId,
-        );
-      })
-      .map(
-        (trabajador) => SelectionOption<int>(
-          value: trabajador['id_trabajador'] as int,
-          label: trabajador['nombre'] as String,
-        ),
-      )
-      .toList(),
-  onChanged: (value) {
-    setState(() => _selectedSubjectId = value);
-  },
-  validator: (value) {
-    if (_isThirdParty && value == null) {
-      return 'Selecciona a la persona reportada';
-    }
-    return null;
-  },
-),
+              SelectionField<int>(
+                key: ValueKey(_selectedProjectId),
+                label: 'PERSONA REPORTADA',
+                hint: 'Selecciona a la persona reportada',
+                value: _selectedSubjectId,
+                options: _trabajadoresReales
+                    .where((trabajador) {
+                      final proyectos = trabajador['proyectos'] as List? ?? [];
 
+                      return proyectos.any(
+                        (proyecto) =>
+                            proyecto['id_proyecto'] == _selectedProjectId,
+                      );
+                    })
+                    .map(
+                      (trabajador) => SelectionOption<int>(
+                        value: trabajador['id_trabajador'] as int,
+                        label: trabajador['nombre'] as String,
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  setState(() => _selectedSubjectId = value);
+                },
+                validator: (value) {
+                  if (_isThirdParty && value == null) {
+                    return 'Selecciona a la persona reportada';
+                  }
+                  return null;
+                },
+              ),
             ],
             const SizedBox(height: 14),
             const Text(
@@ -476,27 +582,29 @@ SelectionField<int>(
                   : null,
             ),
             const SizedBox(height: 14),
-            
-SelectionField<int>(
-  label: 'CONDICIÓN DEL EVENTO (PARE)',
-  wrapOptionLabels: true,
-  hint: 'Seleccione la condición identificada',
-  value: _selectedConditionId,
-  options: _condicionesPare.map((condition) {
-    final id = condition['id_condicion'] ?? condition['id'];
-    final label =
-        condition['nombre'] ?? condition['descripcion'] ?? condition['detalle'];
-    return SelectionOption<int>(
-      value: (id as num).toInt(),
-      label: label.toString(),
-    );
-  }).toList(),
-  onChanged: (value) {
-    setState(() => _selectedConditionId = value);
-  },
-  validator: (value) =>
-      value == null ? 'Seleccione una condición' : null,
-),
+
+            SelectionField<int>(
+              label: 'CONDICIÓN DEL EVENTO (PARE)',
+              wrapOptionLabels: true,
+              hint: 'Seleccione la condición identificada',
+              value: _selectedConditionId,
+              options: _condicionesPare.map((condition) {
+                final id = condition['id_condicion'] ?? condition['id'];
+                final label =
+                    condition['nombre'] ??
+                    condition['descripcion'] ??
+                    condition['detalle'];
+                return SelectionOption<int>(
+                  value: (id as num).toInt(),
+                  label: label.toString(),
+                );
+              }).toList(),
+              onChanged: (value) {
+                setState(() => _selectedConditionId = value);
+              },
+              validator: (value) =>
+                  value == null ? 'Seleccione una condición' : null,
+            ),
 
             const SizedBox(height: 14),
             const Text(

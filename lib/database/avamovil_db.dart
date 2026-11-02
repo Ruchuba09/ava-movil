@@ -1,14 +1,16 @@
+import 'dart:io';
+
 import 'package:avamovil/database/principal.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart' as ffi;
 
 class AvaMovilDatabase {
-  static final AvaMovilDatabase instance =
-      AvaMovilDatabase._init();
+  static final AvaMovilDatabase instance = AvaMovilDatabase._init();
 
   static Database? _database;
 
-  static const int version = 2;
+  static const int version = 3;
   static const String _databaseName = 'avamovil.db';
 
   AvaMovilDatabase._init();
@@ -18,24 +20,20 @@ class AvaMovilDatabase {
       return _database!;
     }
 
-    _database =
-        await _initDB(_databaseName);
+    _database = await _initDB(_databaseName);
 
     return _database!;
   }
 
+  Future<Database> _initDB(String filePath) async {
+    if (Platform.isWindows || Platform.isLinux) {
+      ffi.sqfliteFfiInit();
+      databaseFactory = ffi.databaseFactoryFfi;
+    }
 
-  Future<Database> _initDB(
-    String filePath,
-  ) async {
-    final dbPath =
-        await getDatabasesPath();
+    final dbPath = await _databaseDirectory();
 
-    final path =
-        join(
-      dbPath,
-      filePath,
-    );
+    final path = join(dbPath, filePath);
 
     return openDatabase(
       path,
@@ -43,9 +41,7 @@ class AvaMovilDatabase {
       version: version,
 
       onConfigure: (db) async {
-        await db.execute(
-          'PRAGMA foreign_keys = ON;',
-        );
+        await db.execute('PRAGMA foreign_keys = ON;');
       },
 
       onCreate: _onCreateDB,
@@ -54,14 +50,43 @@ class AvaMovilDatabase {
     );
   }
 
+  Future<String> _databaseDirectory() async {
+    if (Platform.isWindows || Platform.isLinux) {
+      final currentPath = await getDatabasesPath();
+      final ffiDefaultPath = join(
+        '.dart_tool',
+        'sqflite_common_ffi',
+        'databases',
+      );
+      if (!currentPath.endsWith(ffiDefaultPath)) return currentPath;
 
-  Future<void> _onCreateDB(
-    Database db,
-    int version,
-  ) async {
-    final List<String>
-        tableCreationStatements = [
+      final basePath = Platform.isWindows
+          ? Platform.environment['LOCALAPPDATA'] ??
+                Platform.environment['APPDATA'] ??
+                Platform.environment['USERPROFILE']
+          : Platform.environment['XDG_DATA_HOME'] ??
+                join(Platform.environment['HOME'] ?? '.', '.local', 'share');
+      if (basePath == null || basePath.trim().isEmpty) {
+        throw StateError(
+          'El sistema no indicó una carpeta de datos de usuario.',
+        );
+      }
 
+      final directory = Directory(
+        Platform.isWindows
+            ? join(basePath, 'AVA Montajes', 'AVA Móvil')
+            : join(basePath, 'ava-movil'),
+      );
+      await directory.create(recursive: true);
+      await databaseFactory.setDatabasesPath(directory.path);
+      return directory.path;
+    }
+
+    return getDatabasesPath();
+  }
+
+  Future<void> _onCreateDB(Database db, int version) async {
+    final List<String> tableCreationStatements = [
       // Tablas base
       personasTable,
       rolesTable,
@@ -104,22 +129,17 @@ class AvaMovilDatabase {
 
       // Solo móvil
       sincronizacionTable,
+      offlineCacheTable,
     ];
 
-    for (
-      final statement
-      in tableCreationStatements
-    ) {
+    for (final statement in tableCreationStatements) {
       await db.execute(statement);
     }
 
     await _crearIndices(db);
   }
 
-
-  Future<void> _crearIndices(
-    Database db,
-  ) async {
+  Future<void> _crearIndices(Database db) async {
     await db.execute('''
       CREATE INDEX
       IF NOT EXISTS
@@ -212,12 +232,7 @@ class AvaMovilDatabase {
     ''');
   }
 
-
-  Future<void> _onUpgradeDB(
-    Database db,
-    int oldVersion,
-    int newVersion,
-  ) async {
+  Future<void> _onUpgradeDB(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2 && newVersion >= 2) {
       await db.execute('''
         ALTER TABLE sincronizacion
@@ -246,18 +261,16 @@ class AvaMovilDatabase {
         ON sincronizacion(tabla, registro_id);
       ''');
     }
+
+    if (oldVersion < 3 && newVersion >= 3) {
+      await db.execute(offlineCacheTable);
+    }
   }
 
-
   Future<void> deleteDB() async {
-    final dbPath =
-        await getDatabasesPath();
+    final dbPath = await getDatabasesPath();
 
-    final path =
-        join(
-      dbPath,
-      _databaseName,
-    );
+    final path = join(dbPath, _databaseName);
 
     final openDatabase = _database;
     if (openDatabase != null) {

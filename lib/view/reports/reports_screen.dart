@@ -3,10 +3,12 @@ import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/widgets/selection_field.dart';
 import 'package:avamovil/services/api_service.dart';
+import 'package:avamovil/services/offline_store.dart';
 import 'package:avamovil/view/reports/report_detail_screen.dart';
 
 class ReportsScreen extends StatefulWidget {
   final String accessToken;
+  final String? userKey;
   final String initialStatusFilter;
   final String initialProjectFilter;
   final bool onlyCurrentUser;
@@ -16,6 +18,7 @@ class ReportsScreen extends StatefulWidget {
   const ReportsScreen({
     super.key,
     required this.accessToken,
+    this.userKey,
     this.initialStatusFilter = 'Todos',
     this.initialProjectFilter = 'Todos los proyectos',
     this.onlyCurrentUser = false,
@@ -30,12 +33,17 @@ class ReportsScreen extends StatefulWidget {
 class _ReportsScreenState extends State<ReportsScreen> {
   List<Map<String, dynamic>> _eventosReales = [];
   bool _cargandoEventos = false;
+  bool _mostrandoCacheOffline = false;
   late String _statusFilter;
   late String _projectFilter;
   String _conditionFilter = 'Todas';
   final TextEditingController _internalIdController = TextEditingController();
   DateTime? _fromDate;
   DateTime? _toDate;
+  final OfflineStore _offlineStore = OfflineStore();
+
+  String get _userKey =>
+      widget.userKey ?? OfflineStore.userKeyFor(DemoData.instance.currentUser);
 
   @override
   void initState() {
@@ -48,14 +56,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Map<String, dynamic> _adaptarEvento(Map<String, dynamic> evento) {
     final proyecto = evento['proyecto'] as Map?;
     final fecha = DateTime.parse(evento['fecha_creacion'] as String).toLocal();
+    final isPendingOffline = evento['_offline_pending'] == true;
 
     final condicionNumero = (num.tryParse(evento['condicion'].toString()) ?? 0)
         .toInt();
 
     return {
       'id_evento': evento['id_evento'],
-      'id': 'EVENTO-${evento['id_evento']}',
-      'displayId': '#${evento['id_evento']}',
+      'id': isPendingOffline
+          ? 'LOCAL-${evento['id_evento']}'
+          : 'EVENTO-${evento['id_evento']}',
+      'displayId': isPendingOffline
+          ? 'LOCAL-${evento['id_evento']}'
+          : '#${evento['id_evento']}',
       'project': proyecto?['nombre'] ?? 'Proyecto desconocido',
       'condition': '#$condicionNumero',
       'conditionText':
@@ -64,14 +77,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
           : 'Condición no especificada',
       'reference': evento['referencia'] ?? '',
       'description': evento['descripcion'] ?? '',
-      'status': evento['estado'] == 'abierta'
+      'status': isPendingOffline
+          ? 'PENDIENTE DE SINCRONIZAR'
+          : evento['estado'] == 'abierta'
           ? 'ABIERTA'
           : evento['estado'] == 'cerrada'
           ? 'CERRADA'
           : evento['estado'].toString().toUpperCase(),
       'date': fecha,
       'createdAt': fecha,
-      'hasConnectionAtCreation': true,
+      'hasConnectionAtCreation': !isPendingOffline,
+      'pendingSync': isPendingOffline,
       'isThirdParty': false,
       'reporter': 'Registrado en Laravel',
       'createdBy': 'Registrado en Laravel',
@@ -84,6 +100,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     setState(() => _cargandoEventos = true);
 
     final servicio = ApiService(accessToken: widget.accessToken);
+    var permiteDatosLocales = true;
 
     try {
       final eventos = widget.onlyCurrentUser
@@ -101,7 +118,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   _adaptarEvento(Map<String, dynamic>.from(evento as Map)),
             )
             .toList();
+        _mostrandoCacheOffline = false;
       });
+      try {
+        await _offlineStore.saveJson(
+          userKey: _userKey,
+          key: widget.onlyCurrentUser
+              ? OfflineStore.myReportsKey
+              : OfflineStore.teamReportsKey,
+          value: eventos,
+        );
+      } catch (error) {
+        debugPrint('No se pudieron guardar localmente los reportes: $error');
+      }
 
       debugPrint(
         'Eventos reales recibidos desde Laravel: ${_eventosReales.length}',
@@ -125,10 +154,62 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
       debugPrint('ERROR EN $origen: $error');
 
-      if (mounted) {
+      if (!mounted) return;
+      if (error is ApiException &&
+          (error.statusCode == 401 || error.statusCode == 403)) {
+        permiteDatosLocales = false;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'La sesión ya no está autorizada. Vuelve a iniciar sesión.',
+            ),
+          ),
+        );
+        return;
+      }
+      final cacheKey = widget.onlyCurrentUser
+          ? OfflineStore.myReportsKey
+          : OfflineStore.teamReportsKey;
+      Object? cachedReports;
+      try {
+        cachedReports = await _offlineStore.readJson(
+          userKey: _userKey,
+          key: cacheKey,
+        );
+      } catch (cacheError) {
+        debugPrint('No se pudieron leer los reportes guardados: $cacheError');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No se pudieron leer los reportes offline.'),
+            ),
+          );
+        }
+        return;
+      }
+      if (!mounted) return;
+      final cachedList = cachedReports;
+      if (cachedList is List) {
+        setState(() {
+          _eventosReales = cachedList
+              .whereType<Map>()
+              .map(
+                (evento) => _adaptarEvento(Map<String, dynamic>.from(evento)),
+              )
+              .toList();
+          _mostrandoCacheOffline = true;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Sin conexión: mostrando los últimos reportes sincronizados.',
+            ),
+          ),
+        );
+      } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('No se pudieron cargar los reportes: $error'),
+            content: Text('No hay reportes guardados offline: $error'),
             backgroundColor: Colors.red,
           ),
         );
@@ -136,10 +217,57 @@ class _ReportsScreenState extends State<ReportsScreen> {
     } finally {
       servicio.close();
 
-      if (mounted) {
+      if (mounted && permiteDatosLocales) {
+        try {
+          await _appendPendingReports();
+        } catch (error) {
+          debugPrint(
+            'No se pudieron leer los reportes locales pendientes: $error',
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('No se pudieron leer los cambios pendientes.'),
+              ),
+            );
+          }
+        }
+        if (mounted) setState(() => _cargandoEventos = false);
+      } else if (mounted) {
         setState(() => _cargandoEventos = false);
       }
     }
+  }
+
+  Future<void> _appendPendingReports() async {
+    final pendingEntries = await _offlineStore.pendingReports(_userKey);
+    if (!mounted || pendingEntries.isEmpty) return;
+
+    final pendingIds = pendingEntries.map((entry) => -entry.id).toSet();
+    final reports = _eventosReales
+        .where((report) => !pendingIds.contains(report['id_evento']))
+        .toList();
+
+    for (final entry in pendingEntries) {
+      final payload = entry.payload!;
+      reports.add(
+        _adaptarEvento({
+          '_offline_pending': true,
+          'id_evento': -entry.id,
+          'fecha_creacion':
+              payload['fecha_creacion_local'] as String? ??
+              DateTime.now().toUtc().toIso8601String(),
+          'condicion': payload['condicion'] ?? 0,
+          'estado': 'pendiente',
+          'proyecto': {'nombre': payload['proyecto_nombre'] ?? 'Proyecto'},
+          'referencia': payload['referencia'] ?? '',
+          'descripcion': payload['descripcion'] ?? '',
+          'evidencia': const [],
+        }),
+      );
+    }
+
+    _eventosReales = reports;
   }
 
   @override
@@ -227,6 +355,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (_mostrandoCacheOffline)
+              const ListTile(
+                leading: Icon(Icons.cloud_off_outlined),
+                title: Text('Modo sin conexión'),
+                subtitle: Text(
+                  'Estos datos corresponden a la última sincronización.',
+                ),
+                dense: true,
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: Column(
@@ -459,10 +596,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
                         final createdBy =
                             (report['createdBy'] ?? report['reporter'])
                                 .toString();
-                        final statusColor = isOpen
+                        final isPending = report['pendingSync'] == true;
+                        final statusColor = isPending
+                            ? Colors.orange.shade800
+                            : isOpen
                             ? const Color(0xFFFF542E)
                             : Colors.cyan;
-                        final cardColor = isOpen
+                        final cardColor = isPending
+                            ? Colors.orange.shade100
+                            : isOpen
                             ? verde5Color
                             : Colors.cyan.shade100;
                         return Card(
@@ -481,6 +623,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           clipBehavior: Clip.antiAlias,
                           child: InkWell(
                             onTap: () async {
+                              if (isPending) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Este reporte aún no se ha sincronizado y no tiene ID del servidor.',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
                               await Navigator.of(context).push(
                                 MaterialPageRoute(
                                   builder: (context) => ReportDetailScreen(
@@ -552,7 +704,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                             ),
                                             const SizedBox(width: 8),
                                             Text(
-                                              isOpen ? 'ABIERTA' : 'CERRADA',
+                                              report['status'] as String,
                                               style: TextStyle(
                                                 color: isOpen
                                                     ? const Color(0xFFFF542E)

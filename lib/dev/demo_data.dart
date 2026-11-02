@@ -144,19 +144,6 @@ class DemoData extends ChangeNotifier {
   int _nextEmergencyAlertId = 1;
   bool? _authenticatedAsWorker;
   final List<Map<String, dynamic>> emergencyAlerts = [];
-  final Map<String, int> _demoAccountUserIds = {
-    'admin@ejemplo.cl': 3,
-    'analista@ejemplo.cl': 4,
-    'jfcua@ejemplo.cl': 1,
-    'trabajador@ejemplo.cl': 11,
-  };
-  final Map<String, String> _demoAccountPasswords = {
-    'admin@ejemplo.cl': '1234',
-    'analista@ejemplo.cl': '1234',
-    'jfcua@ejemplo.cl': '1234',
-    'trabajador@ejemplo.cl': '1234',
-  };
-
   Map<String, dynamic> currentUser = {
     'id': 1,
     'name': 'Carlos Gómez',
@@ -411,18 +398,6 @@ class DemoData extends ChangeNotifier {
     }
     _setCurrentUserById(userId);
     notifyListeners();
-  }
-
-  bool authenticate(String email, String password) {
-    final normalizedEmail = email.trim().toLowerCase();
-    if (_demoAccountPasswords[normalizedEmail] != password) return false;
-    final userId = _demoAccountUserIds[normalizedEmail];
-    if (userId == null) {
-      throw StateError('La cuenta de demostración no tiene usuario asociado.');
-    }
-    _setCurrentUserById(userId);
-    notifyListeners();
-    return true;
   }
 
   void setAuthenticatedUser(
