@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/services/api_service.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/home/home_screen.dart';
@@ -39,21 +40,23 @@ class _LoginScreenState extends State<LoginScreen> {
         rut: _emailController.text.trim(),
         password: _passwordController.text,
       );
+      final profile = await servicio.obtenerUsuarioAutenticado();
 
       if (!mounted) return;
 
-      debugPrint(
-        'Inicio de sesión correcto. Token recibido: ${token.isNotEmpty}',
+      DemoData.instance.setAuthenticatedUser(
+        profile,
+        fallbackEmail: _emailController.text.trim(),
       );
 
       Navigator.pushReplacement(
-  context,
-  MaterialPageRoute(
-    builder: (context) => HomeScreen(
-      accessToken: token,
-    ),
-  ),
-);
+        context,
+        MaterialPageRoute(
+          builder: (context) => HomeScreen(
+            accessToken: token,
+          ),
+        ),
+      );
     } on ApiException catch (error) {
       if (!mounted) return;
 
@@ -64,6 +67,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(mensaje)),
+      );
+    } on FormatException catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo identificar tu perfil: $error')),
       );
     } catch (error) {
       if (!mounted) return;

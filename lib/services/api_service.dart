@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -8,18 +7,16 @@ class ApiException implements Exception {
   final int statusCode;
   final String message;
 
-  const ApiException({
-    required this.statusCode,
-    required this.message,
-  });
+  const ApiException({required this.statusCode, required this.message});
 
   @override
   String toString() => 'ApiException($statusCode): $message';
 }
 
 class ApiService {
-  static const String configuredBaseUrl =
-      String.fromEnvironment('API_BASE_URL');
+  static const String configuredBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+  );
 
   final http.Client _client;
   final String _baseUrl;
@@ -31,29 +28,21 @@ class ApiService {
     String? baseUrl,
     this.accessToken,
     this.timeout = const Duration(seconds: 20),
-  })  : _client = client ?? http.Client(),
-        _baseUrl = baseUrl ?? configuredBaseUrl {
+  }) : _client = client ?? http.Client(),
+       _baseUrl = baseUrl ?? configuredBaseUrl {
     if (timeout <= Duration.zero) {
-      throw ArgumentError.value(
-        timeout,
-        'timeout',
-        'Debe ser positivo.',
-      );
+      throw ArgumentError.value(timeout, 'timeout', 'Debe ser positivo.');
     }
   }
-  
+
   Future<String> iniciarSesion({
     required String rut,
     required String password,
   }) async {
-
     final response = await _client
         .post(
           _endpoint('login'),
-          headers: {
-            ..._headers(),
-            'Content-Type': 'application/json',
-          },
+          headers: {..._headers(), 'Content-Type': 'application/json'},
           body: jsonEncode({
             'rut': rut.trim(),
             'password': password,
@@ -67,21 +56,15 @@ class ApiService {
     if (body is! Map ||
         body['access_token'] is! String ||
         (body['access_token'] as String).isEmpty) {
-      throw const FormatException(
-        'Laravel no devolvió un token válido.',
-      );
+      throw const FormatException('Laravel no devolvió un token válido.');
     }
 
     return body['access_token'] as String;
   }
 
-  
   Future<List<dynamic>> obtenerProyectos() async {
     final response = await _client
-        .get(
-          _endpoint('proyectos'),
-          headers: _headers(),
-        )
+        .get(_endpoint('proyectos'), headers: _headers())
         .timeout(timeout);
 
     final body = _decodeResponse(response);
@@ -95,13 +78,9 @@ class ApiService {
     return body;
   }
 
-  
   Future<Map<String, dynamic>> obtenerOpcionesEventos() async {
     final response = await _client
-        .get(
-          _endpoint('eventos/opciones'),
-          headers: _headers(),
-        )
+        .get(_endpoint('eventos/opciones'), headers: _headers())
         .timeout(timeout);
 
     final body = _decodeResponse(response);
@@ -114,13 +93,28 @@ class ApiService {
 
     return body;
   }
-  
+
+  Future<Map<String, dynamic>> obtenerUsuarioAutenticado() async {
+    final response = await _client
+        .get(_endpoint('user'), headers: _headers())
+        .timeout(timeout);
+
+    final body = _decodeResponse(response);
+    final data = body is Map && body['data'] is Map ? body['data'] : body;
+    final usuario = data is Map && data['user'] is Map ? data['user'] : data;
+
+    if (usuario is! Map) {
+      throw const FormatException(
+        'Laravel debe devolver el perfil del usuario autenticado.',
+      );
+    }
+
+    return Map<String, dynamic>.from(usuario);
+  }
+
   Future<List<dynamic>> obtenerEventos() async {
     final response = await _client
-        .get(
-          _endpoint('eventos'),
-          headers: _headers(),
-        )
+        .get(_endpoint('eventos'), headers: _headers())
         .timeout(timeout);
 
     final body = _decodeResponse(response);
@@ -134,13 +128,9 @@ class ApiService {
     return body;
   }
 
-  
   Future<List<dynamic>> obtenerMisReportes() async {
     final response = await _client
-        .get(
-          _endpoint('eventos/mis-reportes'),
-          headers: _headers(),
-        )
+        .get(_endpoint('eventos/mis-reportes'), headers: _headers())
         .timeout(timeout);
 
     final body = _decodeResponse(response);
@@ -154,78 +144,51 @@ class ApiService {
     return body;
   }
 
-  
-Future<List<dynamic>> obtenerReportesMiCuadrilla() async {
-  
-final usuarioResponse = await _client
-    .get(
-      _endpoint('user'),
-      headers: _headers(),
-    )
-    .timeout(timeout);
+  Future<List<dynamic>> obtenerReportesMiCuadrilla() async {
+    final response = await _client
+        .get(_endpoint('eventos/mi-cuadrilla'), headers: _headers())
+        .timeout(timeout);
 
-debugPrint(
-  'USUARIO AUTENTICADO POR SANCTUM: '
-  '${usuarioResponse.statusCode} - ${usuarioResponse.body}',
-);
+    final body = _decodeResponse(response);
 
-  final response = await _client
-      .get(
-        _endpoint('eventos/mi-cuadrilla'),
-        headers: _headers(),
-      )
-      .timeout(timeout);
+    if (body is! List) {
+      throw const FormatException(
+        'Laravel debe devolver una lista de reportes de la cuadrilla.',
+      );
+    }
 
-  final body = _decodeResponse(response);
-
-  if (body is! List) {
-    throw const FormatException(
-      'Laravel debe devolver una lista de reportes de la cuadrilla.',
-    );
+    return body;
   }
 
-  return body;
-}
+  Future<Map<String, dynamic>> cerrarEvento({
+    required int idEvento,
+    required String justificacion,
+  }) async {
+    final texto = justificacion.trim();
 
-  
-Future<Map<String, dynamic>> cerrarEvento({
-  required int idEvento,
-  required String justificacion,
-}) async {
-  final texto = justificacion.trim();
+    if (texto.isEmpty || texto.length > 500) {
+      throw ArgumentError(
+        'La justificación debe tener entre 1 y 500 caracteres.',
+      );
+    }
 
-  if (texto.isEmpty || texto.length > 500) {
-    throw ArgumentError(
-      'La justificación debe tener entre 1 y 500 caracteres.',
-    );
+    final response = await _client
+        .patch(
+          _endpoint('eventos/$idEvento/cerrar'),
+          headers: {..._headers(), 'Content-Type': 'application/json'},
+          body: jsonEncode({'justificacion': texto}),
+        )
+        .timeout(timeout);
+
+    final body = _decodeResponse(response);
+
+    if (body is! Map<String, dynamic>) {
+      throw const FormatException('Laravel no devolvió un evento válido.');
+    }
+
+    return body;
   }
 
-  final response = await _client
-      .patch(
-        _endpoint('eventos/$idEvento/cerrar'),
-        headers: {
-          ..._headers(),
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'justificacion': texto,
-        }),
-      )
-      .timeout(timeout);
-
-  final body = _decodeResponse(response);
-
-  if (body is! Map<String, dynamic>) {
-    throw const FormatException(
-      'Laravel no devolvió un evento válido.',
-    );
-  }
-
-  return body;
-}
-
-
-  
   Future<Map<String, dynamic>> registrarEvento({
     required int idTipoEvento,
     required int condicion,
@@ -241,15 +204,10 @@ Future<Map<String, dynamic>> cerrarEvento({
     }
 
     if (!esParaMi && idTrabajador == null) {
-      throw ArgumentError(
-        'Debe seleccionar a la persona reportada.',
-      );
+      throw ArgumentError('Debe seleccionar a la persona reportada.');
     }
 
-    final request = http.MultipartRequest(
-      'POST',
-      _endpoint('eventos'),
-    );
+    final request = http.MultipartRequest('POST', _endpoint('eventos'));
 
     request.headers.addAll(_headers());
 
@@ -268,9 +226,7 @@ Future<Map<String, dynamic>> cerrarEvento({
       final bytes = await evidencia.readAsBytes();
 
       if (bytes.length > 5 * 1024 * 1024) {
-        throw ArgumentError(
-          'Cada evidencia debe pesar máximo 5 MB.',
-        );
+        throw ArgumentError('Cada evidencia debe pesar máximo 5 MB.');
       }
 
       request.files.add(
@@ -282,12 +238,11 @@ Future<Map<String, dynamic>> cerrarEvento({
       );
     }
 
-    final streamedResponse =
-        await _client.send(request).timeout(timeout);
+    final streamedResponse = await _client.send(request).timeout(timeout);
 
-    final response =
-        await http.Response.fromStream(streamedResponse)
-            .timeout(timeout);
+    final response = await http.Response.fromStream(
+      streamedResponse,
+    ).timeout(timeout);
 
     final body = _decodeResponse(response);
 
@@ -302,13 +257,10 @@ Future<Map<String, dynamic>> cerrarEvento({
     return body;
   }
 
-
-
   Map<String, String> _headers() {
     return {
       'Accept': 'application/json',
-      if (accessToken != null &&
-          accessToken!.trim().isNotEmpty)
+      if (accessToken != null && accessToken!.trim().isNotEmpty)
         'Authorization': 'Bearer $accessToken',
     };
   }
@@ -325,15 +277,12 @@ Future<Map<String, dynamic>> cerrarEvento({
     }
 
     final uri = Uri.tryParse(
-      configuredUrl.endsWith('/')
-          ? configuredUrl
-          : '$configuredUrl/',
+      configuredUrl.endsWith('/') ? configuredUrl : '$configuredUrl/',
     );
 
     if (uri == null ||
         !uri.hasAuthority ||
-        (uri.scheme != 'https' &&
-            uri.scheme != 'http') ||
+        (uri.scheme != 'https' && uri.scheme != 'http') ||
         uri.userInfo.isNotEmpty ||
         uri.query.isNotEmpty ||
         uri.fragment.isNotEmpty) {
@@ -341,14 +290,12 @@ Future<Map<String, dynamic>> cerrarEvento({
         _baseUrl,
         'baseUrl',
         'Debe ser una URL HTTP(S) sin credenciales, '
-        'query ni fragmento.',
+            'query ni fragmento.',
       );
     }
 
     if (kReleaseMode && uri.scheme != 'https') {
-      throw StateError(
-        'La API de producción debe utilizar HTTPS.',
-      );
+      throw StateError('La API de producción debe utilizar HTTPS.');
     }
 
     return uri.resolve(resource);
@@ -361,24 +308,18 @@ Future<Map<String, dynamic>> cerrarEvento({
       try {
         body = jsonDecode(response.body);
       } on FormatException {
-        if (response.statusCode >= 200 &&
-            response.statusCode < 300) {
+        if (response.statusCode >= 200 && response.statusCode < 300) {
           rethrow;
         }
       }
     }
 
-    if (response.statusCode < 200 ||
-        response.statusCode >= 300) {
-      final message =
-          body is Map && body['message'] is String
-              ? body['message'] as String
-              : 'La solicitud a la API falló.';
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final message = body is Map && body['message'] is String
+          ? body['message'] as String
+          : 'La solicitud a la API falló.';
 
-      throw ApiException(
-        statusCode: response.statusCode,
-        message: message,
-      );
+      throw ApiException(statusCode: response.statusCode, message: message);
     }
 
     return body;

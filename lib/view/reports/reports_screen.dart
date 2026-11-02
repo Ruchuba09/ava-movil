@@ -11,6 +11,7 @@ class ReportsScreen extends StatefulWidget {
   final String initialProjectFilter;
   final bool onlyCurrentUser;
   final bool onlyCurrentTeam;
+  final bool canCloseReports;
 
   const ReportsScreen({
     super.key,
@@ -19,6 +20,7 @@ class ReportsScreen extends StatefulWidget {
     this.initialProjectFilter = 'Todos los proyectos',
     this.onlyCurrentUser = false,
     this.onlyCurrentTeam = false,
+    this.canCloseReports = true,
   });
 
   @override
@@ -36,23 +38,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
   DateTime? _toDate;
 
   @override
-void initState() {
-  super.initState();
-  _statusFilter = widget.initialStatusFilter;
-  _projectFilter = widget.initialProjectFilter;
-  _cargarEventos();
-}
+  void initState() {
+    super.initState();
+    _statusFilter = widget.initialStatusFilter;
+    _projectFilter = widget.initialProjectFilter;
+    _cargarEventos();
+  }
 
-  
   Map<String, dynamic> _adaptarEvento(Map<String, dynamic> evento) {
     final proyecto = evento['proyecto'] as Map?;
-    final fecha = DateTime.parse(
-      evento['fecha_creacion'] as String,
-    ).toLocal();
+    final fecha = DateTime.parse(evento['fecha_creacion'] as String).toLocal();
 
-    final condicionNumero =
-        (num.tryParse(evento['condicion'].toString()) ?? 0)
-            .toInt();
+    final condicionNumero = (num.tryParse(evento['condicion'].toString()) ?? 0)
+        .toInt();
 
     return {
       'id_evento': evento['id_evento'],
@@ -60,8 +58,8 @@ void initState() {
       'displayId': '#${evento['id_evento']}',
       'project': proyecto?['nombre'] ?? 'Proyecto desconocido',
       'condition': '#$condicionNumero',
-      'conditionText': condicionNumero >= 1 &&
-              condicionNumero <= DemoData.conditions.length
+      'conditionText':
+          condicionNumero >= 1 && condicionNumero <= DemoData.conditions.length
           ? DemoData.conditions[condicionNumero - 1]
           : 'Condición no especificada',
       'reference': evento['referencia'] ?? '',
@@ -69,8 +67,8 @@ void initState() {
       'status': evento['estado'] == 'abierta'
           ? 'ABIERTA'
           : evento['estado'] == 'cerrada'
-              ? 'CERRADA'
-              : evento['estado'].toString().toUpperCase(),
+          ? 'CERRADA'
+          : evento['estado'].toString().toUpperCase(),
       'date': fecha,
       'createdAt': fecha,
       'hasConnectionAtCreation': true,
@@ -85,32 +83,25 @@ void initState() {
   Future<void> _cargarEventos() async {
     setState(() => _cargandoEventos = true);
 
-    final servicio = ApiService(
-      accessToken: widget.accessToken,
-    );
+    final servicio = ApiService(accessToken: widget.accessToken);
 
     try {
-      
       final eventos = widget.onlyCurrentUser
           ? await servicio.obtenerMisReportes()
           : widget.onlyCurrentTeam
-              ? await servicio.obtenerReportesMiCuadrilla()
-              : await servicio.obtenerEventos();
-
+          ? await servicio.obtenerReportesMiCuadrilla()
+          : await servicio.obtenerEventos();
 
       if (!mounted) return;
 
-      
       setState(() {
         _eventosReales = eventos
             .map(
-              (evento) => _adaptarEvento(
-                Map<String, dynamic>.from(evento as Map),
-              ),
+              (evento) =>
+                  _adaptarEvento(Map<String, dynamic>.from(evento as Map)),
             )
             .toList();
       });
-
 
       debugPrint(
         'Eventos reales recibidos desde Laravel: ${_eventosReales.length}',
@@ -125,26 +116,24 @@ void initState() {
           break;
         }
       }
-    
-} catch (error) {
-  final origen = widget.onlyCurrentUser
-      ? 'eventos/mis-reportes'
-      : widget.onlyCurrentTeam
+    } catch (error) {
+      final origen = widget.onlyCurrentUser
+          ? 'eventos/mis-reportes'
+          : widget.onlyCurrentTeam
           ? 'eventos/mi-cuadrilla'
           : 'eventos';
 
-  debugPrint('ERROR EN $origen: $error');
+      debugPrint('ERROR EN $origen: $error');
 
-  if (mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('No se pudieron cargar los reportes: $error'),
-        backgroundColor: Colors.red,
-      ),
-    );
-  }
-}
- finally {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No se pudieron cargar los reportes: $error'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
       servicio.close();
 
       if (mounted) {
@@ -185,16 +174,12 @@ void initState() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final demoData = DemoData.instance;
     if (_cargandoEventos) {
-    return const Center(
-      child: CircularProgressIndicator(),
-    );
-  }
-    
+      return const Center(child: CircularProgressIndicator());
+    }
 
     return AnimatedBuilder(
       animation: demoData,
       builder: (context, child) {
-        
         final sourceReports = _eventosReales;
 
         final matchingReports = sourceReports.where((report) {
@@ -231,6 +216,13 @@ void initState() {
         final filteredReports = _statusFilter == 'Todos'
             ? demoData.openReportsFirst(matchingReports)
             : matchingReports;
+        final projectNames =
+            _eventosReales
+                .map((report) => report['project'])
+                .whereType<String>()
+                .toSet()
+                .toList()
+              ..sort();
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -292,10 +284,7 @@ void initState() {
                                     label: 'Proyecto',
                                     value: _projectFilter,
                                     options:
-                                        [
-                                              'Todos los proyectos',
-                                              ...DemoData.projects,
-                                            ]
+                                        ['Todos los proyectos', ...projectNames]
                                             .map(
                                               (option) => SelectionOption(
                                                 value: option,
@@ -491,13 +480,12 @@ void initState() {
                           ),
                           clipBehavior: Clip.antiAlias,
                           child: InkWell(
-                            
                             onTap: () async {
                               await Navigator.of(context).push(
                                 MaterialPageRoute(
                                   builder: (context) => ReportDetailScreen(
                                     report: report,
-                                    isLider: true,
+                                    isLider: widget.canCloseReports,
                                     accessToken: widget.accessToken,
                                   ),
                                 ),
@@ -670,6 +658,4 @@ void initState() {
     final date = report['createdAt'] as DateTime? ?? report['date'] as DateTime;
     return '${date.day.toString().padLeft(2, '0')}-${date.month.toString().padLeft(2, '0')}-${date.year} · ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   }
-
-  
 }

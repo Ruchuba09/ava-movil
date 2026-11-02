@@ -72,6 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
   ReportsScreen(
     accessToken: widget.accessToken,
     onlyCurrentUser: true,
+    canCloseReports: false,
   ),
   ];
 

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/reports/camera_access.dart';
+import 'package:avamovil/view/reports/report_qr_screen.dart';
 import 'package:avamovil/view/widgets/selection_field.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:avamovil/services/api_service.dart';
@@ -30,13 +31,26 @@ class _NewReportScreenState extends State<NewReportScreen> {
   int? _selectedProjectId;
   List<Map<String, dynamic>> _proyectosReales = [];
   List<Map<String, dynamic>> _trabajadoresReales = [];
+  List<Map<String, dynamic>> _condicionesReales = [];
   bool _cargandoProyectos = true;
   String? _errorProyectos;
   int? _selectedConditionId;
   int? _selectedSubjectId;
   bool _isThirdParty = false;
   bool _isSubmitting = false;
-  static const int _tipoEventoPare = 4;
+  int _tipoEventoPare = 4;
+
+  List<Map<String, dynamic>> get _condicionesPare {
+    if (_condicionesReales.isNotEmpty) return _condicionesReales;
+    return DemoData.conditions.asMap().entries
+        .map(
+          (entry) => {
+            'id_condicion': entry.key + 1,
+            'nombre': entry.value,
+          },
+        )
+        .toList();
+  }
   @override
   void dispose() {
     _referenceController.dispose();
@@ -59,21 +73,59 @@ Future<void> _cargarProyectos() async {
   try {
     final opciones = await servicio.obtenerOpcionesEventos();
 
-    final proyectos = (opciones['proyectos'] as List)
+  final proyectos = ((opciones['proyectos'] as List?) ?? const [])
         .map((item) => Map<String, dynamic>.from(item as Map))
         .toList();
 
-    final trabajadores = (opciones['trabajadores'] as List)
+  final trabajadores = ((opciones['trabajadores'] as List?) ?? const [])
         .map((item) => Map<String, dynamic>.from(item as Map))
         .toList();
+  final tiposEvento = ((opciones['tiposEvento'] as List?) ?? const [])
+      .whereType<Map>()
+      .map((item) => Map<String, dynamic>.from(item))
+      .toList();
+  final tiposParePorNombre = tiposEvento.where((tipo) {
+    final nombre = (
+      tipo['nombre'] ??
+      tipo['name'] ??
+      tipo['descripcion'] ??
+      ''
+    ).toString();
+    return nombre.toLowerCase().contains('pare');
+  });
+  final tiposParePorId = tiposEvento.where(
+    (tipo) => num.tryParse('${tipo['id_tipo_evento']}') == 4,
+  );
+  final tipoPare = tiposParePorNombre.isNotEmpty
+      ? tiposParePorNombre.first
+      : tiposParePorId.isNotEmpty
+      ? tiposParePorId.first
+      : null;
+  final condiciones = (opciones['condiciones'] ??
+          opciones['condicionesPare'] ??
+          opciones['condiciones_pare'])
+      as List?;
+  final condicionesReales = (condiciones ?? const [])
+      .whereType<Map>()
+      .map((item) => Map<String, dynamic>.from(item))
+      .where(
+        (item) =>
+            (item['id_condicion'] ?? item['id']) is num &&
+            (item['nombre'] ?? item['descripcion'] ?? item['detalle']) is String,
+      )
+      .toList();
 
-    if (!mounted) return;
+  if (!mounted) return;
 
-    setState(() {
-      _proyectosReales = proyectos;
-      _trabajadoresReales = trabajadores;
-      _cargandoProyectos = false;
-      _errorProyectos = null;
+  setState(() {
+    _proyectosReales = proyectos;
+    _trabajadoresReales = trabajadores;
+    _condicionesReales = condicionesReales;
+    if (tipoPare?['id_tipo_evento'] is num) {
+      _tipoEventoPare = (tipoPare!['id_tipo_evento'] as num).toInt();
+    }
+    _cargandoProyectos = false;
+    _errorProyectos = null;
     });
 
     debugPrint(
@@ -203,21 +255,36 @@ Future<void> _cargarProyectos() async {
       if (!mounted) return;
 
       final idEvento = evento['id_evento'];
+      final proyecto = _proyectosReales.firstWhere(
+        (item) => item['id_proyecto'] == proyectoId,
+      );
+      final fecha = DateTime.now();
+      final reporte = <String, dynamic>{
+        'id_evento': idEvento,
+        'id': 'EVENTO-$idEvento',
+        'displayId': '#$idEvento',
+        'project': proyecto['nombre'],
+        'condition': '#$condicionId',
+        'conditionText': _conditionLabel(condicionId),
+        'reference': _referenceController.text.trim(),
+        'description': _descriptionController.text.trim(),
+        'status': 'ABIERTA',
+        'date': fecha,
+        'createdAt': fecha,
+        'hasConnectionAtCreation': true,
+        'isThirdParty': _isThirdParty,
+        'reporter': 'Usuario autenticado',
+        'createdBy': 'Usuario autenticado',
+        'subject': 'No especificado',
+        'evidence': evento['evidencia'] ?? [],
+      };
 
-      await showDialog<void>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Evento registrado'),
-          content: Text(
-            'Laravel confirmó el registro del evento N.º $idEvento. '
-            'El código QR se integrará en una siguiente etapa.',
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (context) => ReportQrScreen(
+            report: reporte,
+            isNewReport: true,
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Aceptar'),
-            ),
-          ],
         ),
       );
     } catch (error) {
@@ -268,6 +335,19 @@ Future<void> _cargarProyectos() async {
         ),
       ),
     );
+  }
+
+  String _conditionLabel(int conditionId) {
+    final matchingCondition = _condicionesPare.where(
+      (condition) =>
+          (condition['id_condicion'] ?? condition['id']) == conditionId,
+    );
+    if (matchingCondition.isEmpty) return 'Condición #$conditionId';
+    final condition = matchingCondition.first;
+    return (condition['nombre'] ??
+            condition['descripcion'] ??
+            condition['detalle'])
+        .toString();
   }
 
   Widget _buildForm(bool isDark) => Card(
@@ -402,10 +482,13 @@ SelectionField<int>(
   wrapOptionLabels: true,
   hint: 'Seleccione la condición identificada',
   value: _selectedConditionId,
-  options: DemoData.conditions.asMap().entries.map((entry) {
+  options: _condicionesPare.map((condition) {
+    final id = condition['id_condicion'] ?? condition['id'];
+    final label =
+        condition['nombre'] ?? condition['descripcion'] ?? condition['detalle'];
     return SelectionOption<int>(
-      value: entry.key + 1,
-      label: entry.value,
+      value: (id as num).toInt(),
+      label: label.toString(),
     );
   }).toList(),
   onChanged: (value) {

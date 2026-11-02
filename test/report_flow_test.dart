@@ -376,4 +376,36 @@ void main() {
       '#closed-2',
     ]);
   });
+
+  test('API-authenticated worker and supervisor roles select correct access', () {
+    final data = DemoData.instance;
+
+    data.setAuthenticatedUser(
+      {
+        'id': 42,
+        'name': 'Trabajador API',
+        'email': 'trabajador@empresa.cl',
+        'role': {'name': 'Operador'},
+      },
+      fallbackEmail: 'trabajador@empresa.cl',
+    );
+    expect(data.isWorker, isTrue);
+    expect(data.canScanReportQr, isFalse);
+
+    data.setAuthenticatedUser(
+      {
+        'id': 7,
+        'name': 'Jefe API',
+        'email': 'jefe@empresa.cl',
+        'roles': [
+          {'name': 'JEFE DE CUADRILLA'},
+        ],
+      },
+      fallbackEmail: 'jefe@empresa.cl',
+    );
+    expect(data.isWorker, isFalse);
+    expect(data.canScanReportQr, isTrue);
+
+    data.authenticate('jfcua@ejemplo.cl', '1234');
+  });
 }

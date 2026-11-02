@@ -252,6 +252,40 @@ void main() {
       }
     });
 
+    test('Obtiene el perfil autenticado de Laravel', () async {
+      final client = MockClient((request) async {
+        expect(request.method, 'GET');
+        expect(request.url, Uri.https('example.test', '/api/user'));
+        expect(request.headers['Authorization'], isNotEmpty);
+
+        return http.Response(
+          jsonEncode({
+            'id': 17,
+            'name': 'Trabajador de prueba',
+            'email': 'trabajador@example.test',
+            'role': {'name': 'TRABAJADOR'},
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+
+      final service = ApiService(
+        client: client,
+        baseUrl: 'https://example.test/api',
+        accessToken: 'token_prueba',
+      );
+
+      try {
+        final user = await service.obtenerUsuarioAutenticado();
+        expect(user['id'], 17);
+        expect(user['name'], 'Trabajador de prueba');
+        expect((user['role'] as Map)['name'], 'TRABAJADOR');
+      } finally {
+        service.close();
+      }
+    });
+
     
     test('Obtiene las opciones reales para crear eventos', () async {
       final clienteSimulado = MockClient((request) async {

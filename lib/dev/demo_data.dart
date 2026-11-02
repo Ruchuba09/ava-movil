@@ -142,6 +142,7 @@ class DemoData extends ChangeNotifier {
   final List<Map<String, dynamic>> notifications = [];
   int _nextNotificationId = 3;
   int _nextEmergencyAlertId = 1;
+  bool? _authenticatedAsWorker;
   final List<Map<String, dynamic>> emergencyAlerts = [];
   final Map<String, int> _demoAccountUserIds = {
     'admin@ejemplo.cl': 3,
@@ -187,11 +188,16 @@ class DemoData extends ChangeNotifier {
         .toList();
   }
 
-  bool get isWorker => currentUser['leaderId'] is int;
+  bool get isWorker =>
+      _authenticatedAsWorker ?? (currentUser['leaderId'] is int);
 
   bool get canScanReportQr {
     final role = currentUser['role'] as String;
-    return role.startsWith('JEFE') || role.startsWith('JEFA');
+    final normalizedRole = role.toUpperCase();
+    return normalizedRole.startsWith('JEFE') ||
+        normalizedRole.startsWith('JEFA') ||
+        normalizedRole.contains('SUPERVISOR') ||
+        normalizedRole.contains('CAPATAZ');
   }
 
   int get currentUserLeaderId =>
@@ -419,7 +425,96 @@ class DemoData extends ChangeNotifier {
     return true;
   }
 
+  void setAuthenticatedUser(
+    Map<String, dynamic> profile, {
+    required String fallbackEmail,
+  }) {
+    final role = _profileRole(profile);
+    final workerRelation =
+        profile['trabajador'] ??
+        profile['usuario_trabajador'] ??
+        profile['usuarioTrabajador'];
+    final isWorker =
+        profile['id_trabajador'] is num ||
+        workerRelation is Map ||
+        _isWorkerRole(role);
+
+    if (role.isEmpty && !isWorker) {
+      throw const FormatException(
+        'Laravel no indicó el rol del usuario autenticado.',
+      );
+    }
+
+    final email =
+        _profileString(profile, const ['email', 'correo']) ?? fallbackEmail;
+    final name = _profileString(profile, const ['name', 'nombre']) ?? email;
+    final id =
+        profile['id'] ??
+        profile['id_user'] ??
+        profile['id_trabajador'] ??
+        profile['trabajador_id'] ??
+        0;
+    final roleLabel = role.isEmpty ? 'TRABAJADOR' : role;
+
+    currentUser = {
+      ...profile,
+      'id': id,
+      'name': name,
+      'email': email,
+      'role': roleLabel,
+      'isApiWorker': isWorker,
+    };
+    _authenticatedAsWorker = isWorker;
+    notifyListeners();
+  }
+
+  String _profileRole(Map<String, dynamic> profile) {
+    final role =
+        profile['role'] ??
+        profile['rol'] ??
+        profile['tipo_usuario'] ??
+        profile['cargo'];
+    if (role is String && role.trim().isNotEmpty) return role.trim();
+    if (role is Map) {
+      final name = role['name'] ?? role['nombre'] ?? role['descripcion'];
+      if (name is String && name.trim().isNotEmpty) return name.trim();
+    }
+
+    final roles = profile['roles'];
+    if (roles is List) {
+      for (final item in roles) {
+        if (item is String && item.trim().isNotEmpty) return item.trim();
+        if (item is Map) {
+          final name = item['name'] ?? item['nombre'] ?? item['descripcion'];
+          if (name is String && name.trim().isNotEmpty) return name.trim();
+        }
+      }
+    }
+
+    return '';
+  }
+
+  bool _isWorkerRole(String role) {
+    final normalizedRole = role.toUpperCase();
+    return normalizedRole.contains('TRABAJADOR') ||
+        normalizedRole.contains('OPERADOR') ||
+        normalizedRole.contains('MECAN') ||
+        normalizedRole.contains('MECÁN') ||
+        normalizedRole.contains('RIGGER') ||
+        normalizedRole.contains('SOLDADOR') ||
+        normalizedRole.contains('PREVENCIONISTA');
+  }
+
+  String? _profileString(Map<String, dynamic> profile, List<String> keys) {
+    for (final key in keys) {
+      final value = profile[key];
+      if (value is String && value.trim().isNotEmpty) return value.trim();
+    }
+    return null;
+  }
+
   void _setCurrentUserById(int userId) {
+    _authenticatedAsWorker = null;
     final matchingUser = _users.where((user) => user['id'] == userId);
     if (matchingUser.isNotEmpty) {
       currentUser = Map<String, dynamic>.from(matchingUser.first);
@@ -883,7 +978,7 @@ class DemoData extends ChangeNotifier {
         'date': date,
         'createdAt': createdAt,
         'status': isClosed ? 'CERRADA' : 'ABIERTA',
-        if (closedAt != null) 'closedAt': closedAt,
+        ...?closedAt == null ? null : {'closedAt': closedAt},
         'hasConnectionAtCreation': true,
         'reporterId': reporterId,
         'reporter': reporter,
