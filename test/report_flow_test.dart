@@ -41,7 +41,7 @@ void main() {
       data.currentUserReports.every(
         (report) =>
             report['createdById'] == data.currentUser['id'] ||
-            report['subjectId'] == data.currentUser['id'],
+            report['reporterId'] == data.currentUser['id'],
       ),
       isTrue,
     );
@@ -234,6 +234,7 @@ void main() {
         home: ReportDetailScreen(report: onlineReport, isLider: false),
       ),
     );
+    expect(find.text('Cierre de Reporte'), findsNothing);
     expect(find.byIcon(Icons.qr_code_2), findsNWidgets(2));
     await tester.tap(find.byTooltip('Mostrar QR del reporte'));
     await tester.pumpAndSettle();
@@ -272,36 +273,36 @@ void main() {
   });
 
   test(
-    'current user reports include cards assigned to the signed-in worker',
+    'current user reports exclude cards assigned but not uploaded by worker',
     () {
       final data = DemoData.instance;
       data.signIn('andres.silva@empresa.cl');
 
       expect(
         data.currentUserReports.any((report) => report['subjectId'] == 21),
-        isTrue,
+        isFalse,
       );
     },
   );
 
-  test('default user has self and third-party seeded reports', () {
+  test('default user sees only self and third-party reports they uploaded', () {
     final data = DemoData.instance;
     data.signIn('carlos.gomez@empresa.cl');
     final reports = data.currentUserReports;
 
     expect(
       reports.map((report) => report['id']),
-      containsAll(['#200', '#199', '#198']),
+      containsAll(['#200', '#199']),
+    );
+    expect(
+      reports.map((report) => report['id']),
+      isNot(contains('#198')),
     );
     expect(data.reports.length, greaterThanOrEqualTo(72));
-    expect(reports.length, greaterThanOrEqualTo(12));
+    expect(reports, isNotEmpty);
     expect(
       reports.firstWhere((report) => report['id'] == '#199')['isThirdParty'],
       isTrue,
-    );
-    expect(
-      reports.firstWhere((report) => report['id'] == '#198')['subject'],
-      'Carlos Gómez',
     );
   });
 

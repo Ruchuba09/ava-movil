@@ -16,6 +16,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:avamovil/services/api_service.dart';
 import 'package:avamovil/services/offline_store.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class NewReportScreen extends StatefulWidget {
   final String accessToken;
@@ -77,11 +78,13 @@ class _NewReportScreenState extends State<NewReportScreen> {
       final opciones = await servicio.obtenerOpcionesEventos();
       _applyEventOptions(opciones);
       try {
-        await _offlineStore.saveJson(
-          userKey: _userKey,
-          key: OfflineStore.eventOptionsKey,
-          value: opciones,
-        );
+        if (!kIsWeb) {
+          await _offlineStore.saveJson(
+            userKey: _userKey,
+            key: OfflineStore.eventOptionsKey,
+            value: opciones,
+          );
+        }
       } catch (error) {
         debugPrint(
           'No se pudieron guardar localmente las opciones PARE: $error',

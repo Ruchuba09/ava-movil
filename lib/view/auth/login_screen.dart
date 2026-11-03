@@ -4,6 +4,7 @@ import 'package:avamovil/services/api_service.dart';
 import 'package:avamovil/services/offline_store.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/home/home_screen.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -25,7 +26,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   final OfflineStore _offlineStore = OfflineStore();
   final OfflineSessionStore _offlineSessionStore = OfflineSessionStore();
-
+  
   @override
   void initState() {
     super.initState();
@@ -40,6 +41,11 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _restoreOfflineSession() async {
+    if (kIsWeb) {
+      if (mounted) setState(() => _isRestoringOfflineSession = false);
+      return;
+    }
+
     try {
       final session = await _offlineSessionStore.read();
       if (session == null) return;
@@ -100,7 +106,15 @@ class _LoginScreenState extends State<LoginScreen> {
         rut: _emailController.text.trim(),
         password: _passwordController.text,
       );
-      final profile = await servicio.obtenerUsuarioAutenticado();
+
+      final servicioAutenticado = ApiService(accessToken: token);
+      final Map<String, dynamic> profile;
+      try {
+        profile = await servicioAutenticado.obtenerUsuarioAutenticado();
+      } finally {
+        servicioAutenticado.close();
+      }
+
 
       if (!mounted) return;
 
@@ -109,26 +123,28 @@ class _LoginScreenState extends State<LoginScreen> {
         fallbackEmail: _emailController.text.trim(),
       );
       final userKey = OfflineStore.userKeyFor(offlineProfile);
-      try {
-        await _offlineSessionStore.clear();
-        await _offlineStore.saveJson(
-          userKey: userKey,
-          key: OfflineStore.profileKey,
-          value: offlineProfile,
-        );
-        await _offlineSessionStore.save(
-          OfflineSession(userKey: userKey, accessToken: token),
-        );
-      } catch (error) {
-        debugPrint('No se pudo persistir la sesión para uso offline: $error');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Sesión iniciada, pero no se pudo guardar el acceso offline.',
-              ),
-            ),
+      if (!kIsWeb) {
+        try {
+          await _offlineSessionStore.clear();
+          await _offlineStore.saveJson(
+            userKey: userKey,
+            key: OfflineStore.profileKey,
+            value: offlineProfile,
           );
+          await _offlineSessionStore.save(
+            OfflineSession(userKey: userKey, accessToken: token),
+          );
+        } catch (error) {
+          debugPrint('No se pudo persistir la sesión para uso offline: $error');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Sesión iniciada, pero no se pudo guardar el acceso offline.',
+                ),
+              ),
+            );
+          }
         }
       }
 
@@ -148,9 +164,8 @@ class _LoginScreenState extends State<LoginScreen> {
     } on ApiException catch (error) {
       if (!mounted) return;
 
-      final mensaje = error.statusCode == 422 || error.statusCode == 401
-          ? 'Correo o contraseña incorrectos.'
-          : 'Error del servidor (${error.statusCode}).';
+      final mensaje =
+          'Laravel respondió HTTP ${error.statusCode}: ${error.message}';
 
       ScaffoldMessenger.of(
         context,

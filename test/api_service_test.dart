@@ -217,7 +217,7 @@ void main() {
         
         final datos = jsonDecode(request.body);
 
-        expect(datos['rut'], 'admin@empresa.cl');
+        expect(datos['rut'], 'trabajador@empresa.cl');
         expect(datos['password'], 'clave_de_prueba');
         expect(datos['device_name'], 'ava_movil');
 
@@ -242,7 +242,7 @@ void main() {
 
       try {
         final token = await servicio.iniciarSesion(
-          rut: 'admin@empresa.cl',
+          rut: 'trabajador@empresa.cl',
           password: 'clave_de_prueba',
         );
 

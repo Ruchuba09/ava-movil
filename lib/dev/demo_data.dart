@@ -169,8 +169,8 @@ class DemoData extends ChangeNotifier {
     return reports
         .where(
           (report) =>
-              (report['createdById'] ?? report['reporterId']) == userId ||
-              report['subjectId'] == userId,
+              report['createdById'] == userId ||
+              report['reporterId'] == userId,
         )
         .toList();
   }
@@ -409,10 +409,24 @@ class DemoData extends ChangeNotifier {
         profile['trabajador'] ??
         profile['usuario_trabajador'] ??
         profile['usuarioTrabajador'];
-    final isWorker =
-        profile['id_trabajador'] is num ||
-        workerRelation is Map ||
-        _isWorkerRole(role);
+    
+final normalizedRole = role.trim().toUpperCase();
+
+final isAdministrativeRole =
+    normalizedRole.contains('ADMINISTRADOR') ||
+    normalizedRole.contains('SUPERVISOR') ||
+    normalizedRole.startsWith('JEFE') ||
+    normalizedRole.startsWith('JEFA') ||
+    normalizedRole.contains('CAPATAZ') ||
+    normalizedRole.contains('ANALISTA');
+
+    final isWorker = isAdministrativeRole
+        ? false
+        : role.isNotEmpty
+            ? _isWorkerRole(role)
+            : (profile['id_trabajador'] is num ||
+                workerRelation is Map);
+
 
     if (role.isEmpty && !isWorker) {
       throw const FormatException(

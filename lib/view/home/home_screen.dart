@@ -14,6 +14,7 @@ import 'package:avamovil/controller/theme_controller.dart';
 import 'package:avamovil/services/api_service.dart';
 import 'package:avamovil/services/offline_store.dart';
 import 'package:avamovil/services/offline_sync_service.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class HomeScreen extends StatefulWidget {
   final String accessToken;
@@ -34,51 +35,73 @@ class _HomeScreenState extends State<HomeScreen> {
   String get _userKey =>
       widget.userKey ?? OfflineStore.userKeyFor(DemoData.instance.currentUser);
 
-  Future<void> _comprobarProyectos() async {
-    final servicio = ApiService(accessToken: widget.accessToken);
+  
+Future<void> _comprobarProyectos() async {
+  final servicio = ApiService(
+    accessToken: widget.accessToken,
+  );
 
-    try {
-      final proyectos = await servicio.obtenerProyectos();
+  try {
+    final proyectos = await servicio.obtenerProyectos();
+
+    if (!kIsWeb) {
       await _offlineStore.saveJson(
         userKey: _userKey,
         key: OfflineStore.projectsKey,
         value: proyectos,
       );
+    }
 
-      if (!mounted) return;
+    if (!mounted) return;
 
-      debugPrint(
-        'Proyectos reales recibidos desde Laravel: ${proyectos.length}',
-      );
-    } on ApiException catch (error) {
-      debugPrint('Error al consultar proyectos: HTTP ${error.statusCode}');
-    } catch (error) {
-      debugPrint('Error de conexión con proyectos: $error');
+    debugPrint(
+      'Proyectos reales recibidos desde Laravel: '
+      '${proyectos.length}',
+    );
+  } on ApiException catch (error) {
+    debugPrint(
+      'Error al consultar proyectos: HTTP ${error.statusCode}',
+    );
+  } catch (error) {
+    debugPrint('Error de conexión con proyectos: $error');
+
+    if (!kIsWeb) {
       try {
         final cachedProjects = await _offlineStore.readJson(
           userKey: _userKey,
           key: OfflineStore.projectsKey,
         );
+
         if (cachedProjects != null) {
           debugPrint('Proyectos cargados desde la caché local.');
         }
       } catch (cacheError) {
-        debugPrint('No se pudieron leer los proyectos locales: $cacheError');
+        debugPrint(
+          'No se pudieron leer los proyectos locales: $cacheError',
+        );
       }
-    } finally {
-      servicio.close();
     }
+  } finally {
+    servicio.close();
   }
+}
 
-  @override
-  void initState() {
-    super.initState();
-    _comprobarProyectos();
+
+  
+@override
+void initState() {
+  super.initState();
+
+  _comprobarProyectos();
+
+  if (!kIsWeb) {
     _syncPendingReports();
   }
+}
+
 
   Future<void> _syncPendingReports() async {
-    if (_isSyncing) return;
+    if (kIsWeb || _isSyncing) return;
     setState(() => _isSyncing = true);
     try {
       final result = await const OfflineSyncService().synchronize(
@@ -112,7 +135,10 @@ class _HomeScreenState extends State<HomeScreen> {
     ReportsScreen(
       accessToken: widget.accessToken,
       userKey: _userKey,
-      onlyCurrentTeam: true,
+      onlyCurrentTeam:
+    DemoData.instance.currentUser['role']
+        .toString()
+        .toLowerCase() != 'administrador',
     ),
     ReportsScreen(
       accessToken: widget.accessToken,
@@ -283,7 +309,19 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _signOut() async {
-    try {
+    
+if (kIsWeb) {
+  if (!mounted) return;
+
+  Navigator.of(context).pushAndRemoveUntil(
+    MaterialPageRoute(
+      builder: (context) => const LoginScreen(),
+    ),
+    (route) => false,
+  );
+
+  return;
+} try {
       await OfflineSessionStore().clear();
     } catch (error) {
       debugPrint('No se pudo borrar la sesión offline: $error');
@@ -333,6 +371,7 @@ class _HomeScreenState extends State<HomeScreen> {
               accessToken: widget.accessToken,
               userKey: _userKey,
               onlyCurrentUser: true,
+              canCloseReports: false,
             ),
           ]
         : _widgetOptions;

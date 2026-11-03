@@ -5,6 +5,7 @@ import 'package:avamovil/view/widgets/selection_field.dart';
 import 'package:avamovil/services/api_service.dart';
 import 'package:avamovil/services/offline_store.dart';
 import 'package:avamovil/view/reports/report_detail_screen.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ReportsScreen extends StatefulWidget {
   final String accessToken;
@@ -217,7 +218,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     } finally {
       servicio.close();
 
-      if (mounted && permiteDatosLocales) {
+      if (mounted && permiteDatosLocales && !kIsWeb) {
         try {
           await _appendPendingReports();
         } catch (error) {
@@ -380,7 +381,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   const SizedBox(height: 4),
                   Text(
                     widget.onlyCurrentUser
-                        ? 'Tarjetas creadas por ti o asociadas a tu usuario.'
+                      ? 'Tarjetas PARE que subiste.'
                         : widget.onlyCurrentTeam
                         ? 'Reportes asignados a tu cuadrilla para revisar y cerrar.'
                         : 'Listado de reportes registrados.',

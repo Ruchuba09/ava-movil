@@ -141,6 +141,14 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
 
   
 Future<void> _closeReport() async {
+  if (!widget.isLider) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('No tienes permiso para cerrar esta Tarjeta PARE.'),
+      ),
+    );
+    return;
+  }
   if (_cerrandoEvento) return;
   if (!_formKey.currentState!.validate()) return;
 
