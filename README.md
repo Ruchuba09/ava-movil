@@ -2,8 +2,8 @@
 
 ## Entorno de desarrollo
 
-Flutter 3.41.6
-Dart 3.11.4
+Flutter 3.44 o superior
+Dart 3.12 o superior
 DevTools 2.54.2
 
 ---
@@ -74,6 +74,43 @@ flutter run
 flutter run
 ```
 
+### Publicar Android
+
+Los APK/AAB de release no se firman con la clave debug. Guarda las propiedades
+de firma en `android/key.properties` (archivo ignorado por Git) y conserva el
+keystore fuera del repositorio:
+
+```properties
+storeFile=C:/ruta-segura/ava-upload-key.jks
+storePassword=...
+keyAlias=...
+keyPassword=...
+```
+
+La ruta de `storeFile` puede ser absoluta o relativa a `android/`. Sin las
+cuatro propiedades, las tareas `assembleRelease` y `bundleRelease` fallan en
+lugar de producir una publicación con firma debug. No compartas ni subas el
+keystore o sus contraseñas.
+
+### Publicar Windows
+
+Instala el Windows SDK (incluido con Visual Studio Build Tools) y un certificado
+Authenticode de firma de código emitido por una autoridad de confianza.
+Importa el certificado y su clave privada al almacén **Usuario actual > Personal**
+de la cuenta que compila, y configura su huella SHA-1 como
+`AVA_CODESIGN_THUMBPRINT`. Después, desde PowerShell ejecuta:
+
+```powershell
+.\windows\build_signed_release.ps1
+```
+
+El script compila en release, firma el ejecutable principal con SHA-256 y una
+marca de tiempo, y verifica la firma. Requiere `signtool.exe` en `PATH`. No
+incluyas certificados ni claves privadas en el repositorio. La firma identifica
+al editor y mejora la confianza de distribución, pero no garantiza por sí sola
+que SmartScreen elimine todos los avisos; ante una detección concreta, envía a
+Microsoft el archivo exacto y el nombre de detección para su análisis.
+
 ### Modo debug
 
 Mientras la app está corriendo:
@@ -127,7 +164,6 @@ flutter clean
 
 ### Archivos de configuración
 
-- `.env` → Variables de entorno (opcional)
 - `pubspec.yaml` → Dependencias y configuración del proyecto
 - `pubspec.lock` → Versiones exactas de dependencias
 
@@ -140,6 +176,16 @@ flutter clean
   - Desinstalar e instalar la app
   - Manejar versionamiento de base de datos (`onUpgrade`)
 - Evitar duplicar lógica → usar `utils/` o funciones reutilizables
+
+### Base local y sincronización
+
+- SQLite es la persistencia local de la app; la web se conectará al servidor mediante la API, no al archivo SQLite del dispositivo.
+- La tabla `sincronizacion` funciona como cola de salida: las escrituras locales y su entrada de sincronización deben guardarse dentro de la misma transacción.
+- Los cambios de esquema requieren incrementar `AvaMovilDatabase.version` y agregar una migración aditiva en `onUpgrade`; no borrar la base de datos de usuarios para aplicar cambios.
+- `SyncQueue` registra cambios y reintentos; el servicio que los envíe a la API y resuelva conflictos se implementará cuando se defina el contrato.
+- No incluir contraseñas, tokens ni otros secretos en las cargas de la cola.
+- La URL base se inyecta al ejecutar/compilar, por ejemplo `flutter run --dart-define=API_BASE_URL=https://api.example.com/api/`. En producción solo se acepta HTTPS.
+- La app móvil es un cliente público: no guardar claves compartidas del servidor ni secretos de API dentro de ella. La autenticación debe entregar credenciales/tokens de usuario según el contrato del backend.
 
 ---
 
@@ -237,7 +283,3 @@ flutter clean
 - `intl` → Formato de fechas, números, etc.
 - `flutter_cache_manager` → Manejo de caché de archivos
 - `mobile_scanner` → Escaneo de códigos QR
-
-### Configuración
-
-- `flutter_dotenv` → Manejo de variables de entorno (.env)

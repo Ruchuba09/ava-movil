@@ -5,7 +5,12 @@ import 'package:avamovil/view/reports/report_detail_screen.dart';
 import 'package:avamovil/view/reports/reports_screen.dart';
 
 class PermissionsScreen extends StatefulWidget {
-  const PermissionsScreen({super.key});
+  final String accessToken;
+
+  const PermissionsScreen({
+    super.key,
+    required this.accessToken,
+  });
 
   @override
   State<PermissionsScreen> createState() => _PermissionsScreenState();
@@ -110,6 +115,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => ReportsScreen(
+          accessToken: widget.accessToken,
           initialStatusFilter: status,
           initialProjectFilter: 'Todos los proyectos',
         ),
@@ -314,7 +320,7 @@ class WorkerProfileScreen extends StatelessWidget {
                       ),
                     ),
                     title: Text(
-                      '${report['id']}  ${report['project']}',
+                      '${DemoData.instance.reportDisplayId(report)}  ${report['project']}',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontWeight: FontWeight.w600),

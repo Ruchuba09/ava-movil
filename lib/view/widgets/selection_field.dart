@@ -123,32 +123,35 @@ class SelectionField<T> extends StatelessWidget {
     final selected = option.value == value;
     return Material(
       color: selected
-          ? verde5Color.withValues(alpha: 0.2)
-          : (isDark ? Colors.white10 : verde1Color),
+          ? (isDark ? const Color(0xFF34451F) : const Color(0xFFE8F5D7))
+          : (isDark ? const Color(0xFF3A4046) : const Color(0xFFF1F3F4)),
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: () => Navigator.pop(sheetContext, option.value),
         child: Container(
-          constraints: const BoxConstraints(minHeight: 42),
+          constraints: const BoxConstraints(minHeight: 48),
           padding: EdgeInsets.symmetric(
-            horizontal: 8,
-            vertical: wrapOptionLabels ? 12 : 8,
+            horizontal: 14,
+            vertical: wrapOptionLabels ? 14 : 10,
           ),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Flexible(
+              Expanded(
                 child: Text(
                   option.label,
-                  textAlign: TextAlign.center,
+                  textAlign: TextAlign.left,
                   maxLines: wrapOptionLabels ? null : 1,
                   overflow: wrapOptionLabels ? null : TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12),
+                  style: TextStyle(
+                    fontSize: wrapOptionLabels ? 14 : 13,
+                    height: 1.35,
+                    color: isDark ? Colors.white : const Color(0xFF202428),
+                  ),
                 ),
               ),
               if (selected) ...[
-                const SizedBox(width: 2),
+                const SizedBox(width: 10),
                 const Icon(Icons.check_circle, color: verde6Color, size: 16),
               ],
             ],

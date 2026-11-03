@@ -10,7 +10,6 @@ class User implements Identifiable {
   final String? apellido1;
   final String cargo;
   final String? email;
-  final String password;
   final String rut;
   final DateTime? fechaNacimiento;
   final DateTime? primeraConexion;
@@ -29,7 +28,6 @@ class User implements Identifiable {
     this.apellido1,
     required this.cargo,
     this.email,
-    required this.password,
     required this.rut,
     this.fechaNacimiento,
     this.primeraConexion,
@@ -46,7 +44,6 @@ class User implements Identifiable {
       'apellido_1': apellido1,
       'cargo': cargo,
       'email': email,
-      'password': password,
       'rut': rut,
       'fecha_nacimiento': fechaNacimiento?.toIso8601String().split('T').first,
       'primera_conexion': primeraConexion?.toIso8601String(),
@@ -64,7 +61,6 @@ class User implements Identifiable {
       'apellido_1': apellido1,
       'cargo': cargo,
       'email': email,
-      'password': password,
       'rut': rut,
       'fecha_nacimiento': fechaNacimiento?.toIso8601String(),
       'primera_conexion': primeraConexion?.toIso8601String(),
@@ -82,7 +78,6 @@ class User implements Identifiable {
       apellido1: json['apellido_1'] as String?,
       cargo: json['cargo'] as String,
       email: json['email'] as String?,
-      password: json['password'] as String,
       rut: json['rut'] as String,
       fechaNacimiento: json['fecha_nacimiento'] != null
           ? DateTime.parse(json['fecha_nacimiento'] as String)
@@ -106,7 +101,6 @@ class User implements Identifiable {
       apellido1: json['apellido_1'] as String?,
       cargo: json['cargo'] as String,
       email: json['email'] as String?,
-      password: json['password'] as String,
       rut: json['rut'] as String,
       fechaNacimiento: json['fecha_nacimiento'] != null
           ? DateTime.parse(json['fecha_nacimiento'] as String)
