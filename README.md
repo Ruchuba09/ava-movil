@@ -66,6 +66,59 @@ flutter run
 
 ---
 
+## Cómo visualizar la app
+
+Hay dos formas principales de ver la app mientras se desarrolla: en **Chrome** (recomendado, más rápido para iterar en UI) o en un **emulador de Android Studio**.
+
+### Opción 1: Chrome (recomendado)
+
+Es la forma más rápida de levantar la app, ya que no depende de un emulador ni de un dispositivo físico, y el Hot Reload es prácticamente instantáneo.
+
+1. Verificar que Chrome esté disponible como dispositivo:
+
+```bash
+flutter devices
+```
+
+   Debería aparecer algo como `Chrome (web)`.
+
+2. Ejecutar la app en Chrome:
+
+```bash
+flutter run -d chrome
+```
+
+> ⚠️ Nota:  
+> Algunas funcionalidades nativas (cámara, GPS, notificaciones locales, almacenamiento de archivos, etc.) pueden comportarse distinto o no estar disponibles en la versión web. Úsalo para revisar UI/UX y lógica general, pero valida las funcionalidades nativas en Android/iOS.
+
+### Opción 2: Android Studio (emulador)
+
+1. Abrir **Android Studio** → **Device Manager**.
+2. Crear un dispositivo virtual (AVD) si no existe uno (por ejemplo, un Pixel con una imagen de sistema reciente).
+3. Iniciar el emulador desde el Device Manager.
+4. Verificar que el emulador esté disponible:
+
+```bash
+flutter devices
+```
+
+5. Ejecutar la app en el emulador:
+
+```bash
+flutter run
+```
+
+   Si hay más de un dispositivo disponible (por ejemplo Chrome y el emulador a la vez), Flutter pedirá elegir uno, o se puede especificar directamente:
+
+```bash
+flutter run -d <device_id>
+```
+
+> ⚠️ Nota:  
+> Como se menciona más arriba, en emuladores no siempre es posible usar cámara o fotos.
+
+---
+
 ## Comandos
 
 ### Ejecutar la app
@@ -73,6 +126,43 @@ flutter run
 ```bash
 flutter run
 ```
+
+### Publicar Android
+
+Los APK/AAB de release no se firman con la clave debug. Guarda las propiedades
+de firma en `android/key.properties` (archivo ignorado por Git) y conserva el
+keystore fuera del repositorio:
+
+```properties
+storeFile=C:/ruta-segura/ava-upload-key.jks
+storePassword=...
+keyAlias=...
+keyPassword=...
+```
+
+La ruta de `storeFile` puede ser absoluta o relativa a `android/`. Sin las
+cuatro propiedades, las tareas `assembleRelease` y `bundleRelease` fallan en
+lugar de producir una publicación con firma debug. No compartas ni subas el
+keystore o sus contraseñas.
+
+### Publicar Windows
+
+Instala el Windows SDK (incluido con Visual Studio Build Tools) y un certificado
+Authenticode de firma de código emitido por una autoridad de confianza.
+Importa el certificado y su clave privada al almacén **Usuario actual > Personal**
+de la cuenta que compila, y configura su huella SHA-1 como
+`AVA_CODESIGN_THUMBPRINT`. Después, desde PowerShell ejecuta:
+
+```powershell
+.\windows\build_signed_release.ps1
+```
+
+El script compila en release, firma el ejecutable principal con SHA-256 y una
+marca de tiempo, y verifica la firma. Requiere `signtool.exe` en `PATH`. No
+incluyas certificados ni claves privadas en el repositorio. La firma identifica
+al editor y mejora la confianza de distribución, pero no garantiza por sí sola
+que SmartScreen elimine todos los avisos; ante una detección concreta, envía a
+Microsoft el archivo exacto y el nombre de detección para su análisis.
 
 ### Modo debug
 
