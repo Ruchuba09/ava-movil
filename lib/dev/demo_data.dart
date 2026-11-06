@@ -217,6 +217,16 @@ class DemoData extends ChangeNotifier {
     return workers.where((worker) => worker['leaderId'] == leaderId).toList();
   }
 
+  /// En Laravel solo un administrador puede cerrar eventos (`EventoPolicy`).
+  bool get puedeCerrarEventos {
+    final roles = currentUser['roles'];
+    if (roles is! List) return false;
+    return roles.any((rol) {
+      final nombre = rol is Map ? rol['nombre'] ?? rol['name'] : rol;
+      return nombre == 'Administrador';
+    });
+  }
+
   bool canCloseReport(Map<String, dynamic> report) {
     final managerId = report['managerId'] as int;
     return currentUser['id'] == managerId;

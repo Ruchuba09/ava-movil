@@ -1,0 +1,26 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "AVA Móvil (emulador Android)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": ["--dart-define=API_BASE_URL=http://10.0.2.2:8080/api/v1/"]
+    },
+    {
+      "name": "AVA Móvil (Windows o Chrome)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": ["--dart-define=API_BASE_URL=http://localhost:8080/api/v1/"]
+    },
+    {
+      "name": "AVA Móvil (teléfono físico)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": ["--dart-define=API_BASE_URL=http://192.168.1.18:8080/api/v1/"]
+    }
+  ]
+}

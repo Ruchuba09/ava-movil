@@ -79,11 +79,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       'description': evento['descripcion'] ?? '',
       'status': isPendingOffline
           ? 'PENDIENTE DE SINCRONIZAR'
-          : evento['estado'] == 'abierta'
-          ? 'ABIERTA'
-          : evento['estado'] == 'cerrada'
-          ? 'CERRADA'
-          : evento['estado'].toString().toUpperCase(),
+          : ApiService.estadoParaApp(evento['estado']),
       'date': fecha,
       'createdAt': fecha,
       'hasConnectionAtCreation': !isPendingOffline,
@@ -93,6 +89,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       'createdBy': 'Registrado en Laravel',
       'subject': 'No especificado',
       'evidence': evento['evidencia'] ?? [],
+      'closeEvidence': evento['evidencia_cierre'] ?? [],
     };
   }
 
@@ -159,9 +156,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
           (error.statusCode == 401 || error.statusCode == 403)) {
         permiteDatosLocales = false;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'La sesión ya no está autorizada. Vuelve a iniciar sesión.',
+              error.statusCode == 403
+                  ? error.message
+                  : 'La sesión ya no está autorizada. Vuelve a iniciar sesión.',
             ),
           ),
         );
@@ -637,7 +636,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 MaterialPageRoute(
                                   builder: (context) => ReportDetailScreen(
                                     report: report,
-                                    isLider: widget.canCloseReports,
+                                    isLider:
+                                        widget.canCloseReports &&
+                                        DemoData.instance.puedeCerrarEventos,
                                     accessToken: widget.accessToken,
                                   ),
                                 ),

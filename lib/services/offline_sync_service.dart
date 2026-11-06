@@ -57,6 +57,9 @@ class OfflineSyncService {
             idTrabajador: payload['id_trabajador'] is num
                 ? (payload['id_trabajador'] as num).toInt()
                 : null,
+            idArea: payload['id_area'] is num
+                ? (payload['id_area'] as num).toInt()
+                : null,
             evidencias: evidences,
           );
           await queue.markSynced(entry.id);

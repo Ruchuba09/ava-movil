@@ -36,6 +36,8 @@ class _NewReportScreenState extends State<NewReportScreen> {
   List<Map<String, dynamic>> _proyectosReales = [];
   List<Map<String, dynamic>> _trabajadoresReales = [];
   List<Map<String, dynamic>> _condicionesReales = [];
+  Map<String, dynamic> _areasPorProyecto = {};
+  int? _selectedAreaId;
   bool _cargandoProyectos = true;
   String? _errorProyectos;
   int? _selectedConditionId;
@@ -56,6 +58,13 @@ class _NewReportScreenState extends State<NewReportScreen> {
         .map((entry) => {'id_condicion': entry.key + 1, 'nombre': entry.value})
         .toList();
   }
+
+  /// Laravel exige el área solo si la faena del proyecto tiene áreas definidas.
+  List<Map<String, dynamic>> get _areasDelProyecto =>
+      ((_areasPorProyecto['$_selectedProjectId'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((area) => Map<String, dynamic>.from(area))
+          .toList();
 
   @override
   void dispose() {
@@ -180,6 +189,10 @@ class _NewReportScreenState extends State<NewReportScreen> {
       _proyectosReales = proyectos;
       _trabajadoresReales = trabajadores;
       _condicionesReales = condicionesReales;
+      // PHP serializa un mapa vacío como lista.
+      _areasPorProyecto = opciones['areasPorProyecto'] is Map
+          ? Map<String, dynamic>.from(opciones['areasPorProyecto'] as Map)
+          : {};
       if (tipoPare?['id_tipo_evento'] is num) {
         _tipoEventoPare = (tipoPare!['id_tipo_evento'] as num).toInt();
       }
@@ -290,6 +303,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
         idProyecto: proyectoId,
         esParaMi: !_isThirdParty,
         idTrabajador: _isThirdParty ? _selectedSubjectId : null,
+        idArea: _selectedAreaId,
         evidencias: _evidence,
       );
 
@@ -373,6 +387,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
         'proyecto_nombre': project['nombre'],
         'es_para_mi': !_isThirdParty,
         if (_isThirdParty) 'id_trabajador': _selectedSubjectId,
+        if (_selectedAreaId != null) 'id_area': _selectedAreaId,
         'evidencias': evidence,
         'fecha_creacion_local': DateTime.now().toUtc().toIso8601String(),
       };
@@ -394,6 +409,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
       _descriptionController.clear();
       setState(() {
         _selectedProjectId = null;
+        _selectedAreaId = null;
         _selectedConditionId = null;
         _selectedSubjectId = null;
         _isThirdParty = false;
@@ -494,11 +510,34 @@ class _NewReportScreenState extends State<NewReportScreen> {
                   setState(() {
                     _selectedProjectId = value;
                     _selectedSubjectId = null;
+                    _selectedAreaId = null;
                   });
                 },
                 validator: (value) =>
                     value == null ? 'Selecciona un proyecto' : null,
               ),
+
+            if (_areasDelProyecto.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              SelectionField<int>(
+                key: ValueKey('area-$_selectedProjectId'),
+                label: 'ÁREA',
+                hint: 'Selecciona el área donde ocurrió el evento',
+                value: _selectedAreaId,
+                options: _areasDelProyecto
+                    .map(
+                      (area) => SelectionOption<int>(
+                        value: (area['id_area'] as num).toInt(),
+                        label: area['nombre'].toString(),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  setState(() => _selectedAreaId = value);
+                },
+                validator: (value) => value == null ? 'Selecciona un área' : null,
+              ),
+            ],
 
             const SizedBox(height: 14),
             const Text(

@@ -212,7 +212,7 @@ Future<void> _closeReport() async {
 
     if (!mounted) return;
 
-    if (resultado['estado'] != 'cerrada') {
+    if (ApiService.estadoParaApp(resultado['estado']) != 'CERRADA') {
       throw StateError('Laravel no confirmó el estado cerrado.');
     }
 
@@ -257,6 +257,21 @@ Future<void> _closeReport() async {
     return [];
   }
 
+  /// Laravel guarda rutas del disco privado; se sirven desde la API con token.
+  List<String> _evidenciasDelServidor(List<String> rutas) {
+    final idEvento = widget.report['id_evento'];
+    if (idEvento is! int || ApiService.configuredBaseUrl.trim().isEmpty) {
+      return rutas;
+    }
+    return rutas
+        .map(
+          (ruta) => _isRemoteEvidence(ruta)
+              ? ruta
+              : ApiService.urlArchivoEvento(idEvento, ruta).toString(),
+        )
+        .toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -264,10 +279,13 @@ Future<void> _closeReport() async {
     final reportDate =
         widget.report['createdAt'] as DateTime? ??
         widget.report['date'] as DateTime;
-    final reportEvidence = _normalizarEvidencias(widget.report['evidence']);
+    final reportEvidence = _evidenciasDelServidor(
+      _normalizarEvidencias(widget.report['evidence']),
+    );
 
-    final closeEvidence =
-        _normalizarEvidencias(widget.report['closeEvidence']);
+    final closeEvidence = _evidenciasDelServidor(
+      _normalizarEvidencias(widget.report['closeEvidence']),
+    );
     final activityLog =
         (widget.report['activityLog'] as List<dynamic>? ?? const [])
             .whereType<Map<String, dynamic>>()

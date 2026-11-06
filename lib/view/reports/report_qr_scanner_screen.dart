@@ -178,20 +178,7 @@ Future<void> _handleDetection(BarcodeCapture capture) async {
     Map<String, dynamic> evento;
 
     try {
-      final eventos = await servicio.obtenerEventos();
-
-      final encontrado = eventos.firstWhere(
-        (item) => item is Map && item['id_evento'] == idEvento,
-        orElse: () => null,
-      );
-
-      if (encontrado is! Map) {
-        throw const FormatException(
-          'No se encontró el evento en Laravel.',
-        );
-      }
-
-      evento = Map<String, dynamic>.from(encontrado);
+      evento = await servicio.obtenerEvento(idEvento);
     } finally {
       servicio.close();
     }
@@ -217,7 +204,7 @@ Future<void> _handleDetection(BarcodeCapture capture) async {
           : 'Condición no especificada',
       'reference': evento['referencia'] ?? '',
       'description': evento['descripcion'] ?? '',
-      'status': evento['estado'].toString().toUpperCase(),
+      'status': ApiService.estadoParaApp(evento['estado']),
       'date': fecha,
       'createdAt': fecha,
       'hasConnectionAtCreation': true,
@@ -226,18 +213,21 @@ Future<void> _handleDetection(BarcodeCapture capture) async {
       'createdBy': 'Registrado en Laravel',
       'subject': 'No especificado',
       'evidence': evento['evidencia'] ?? [],
+      'closeEvidence': evento['evidencia_cierre'] ?? [],
     };
 
     await Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (context) => ReportDetailScreen(
           report: report,
-          isLider: true,
+          isLider: DemoData.instance.puedeCerrarEventos,
           accessToken: widget.accessToken,
         ),
       ),
     );
   } on FormatException catch (error) {
+    await _showScanError(error.message);
+  } on ApiException catch (error) {
     await _showScanError(error.message);
   } catch (error) {
     await _showScanError('No se pudo consultar Laravel: $error');

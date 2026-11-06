@@ -506,5 +506,116 @@ void main() {
       }
     });
 
+    test('Construye la URL de una evidencia privada solo con su nombre', () {
+      expect(
+        ApiService.urlArchivoEvento(
+          7,
+          'evidencias/foto 1.jpg',
+          baseUrl: 'https://ejemplo.cl/api/v1/',
+        ).toString(),
+        'https://ejemplo.cl/api/v1/eventos/7/archivos/foto%201.jpg',
+      );
+    });
+
+    test('Obtiene los reportes de la cuadrilla', () async {
+      final servicio = ApiService(
+        client: MockClient((request) async {
+          expect(
+            request.url.toString(),
+            'https://ejemplo.cl/api/v1/eventos/mi-cuadrilla',
+          );
+          return http.Response('[]', 200);
+        }),
+        baseUrl: 'https://ejemplo.cl/api/v1/',
+        accessToken: 'token_prueba',
+      );
+
+      try {
+        expect(await servicio.obtenerReportesMiCuadrilla(), isEmpty);
+      } finally {
+        servicio.close();
+      }
+    });
+
+    test('Obtiene un evento por su ID', () async {
+      final servicio = ApiService(
+        client: MockClient((request) async {
+          expect(request.method, 'GET');
+          expect(
+            request.url.toString(),
+            'https://ejemplo.cl/api/v1/eventos/501',
+          );
+          return http.Response(
+            jsonEncode({'id_evento': 501, 'estado': 'en_revision'}),
+            200,
+          );
+        }),
+        baseUrl: 'https://ejemplo.cl/api/v1/',
+        accessToken: 'token_prueba',
+      );
+
+      try {
+        final evento = await servicio.obtenerEvento(501);
+        expect(evento['id_evento'], 501);
+      } finally {
+        servicio.close();
+      }
+    });
+
+    test('Cierra la sesión enviando el token', () async {
+      final servicio = ApiService(
+        client: MockClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.toString(), 'https://ejemplo.cl/api/v1/logout');
+          expect(request.headers['Authorization'], 'Bearer token_prueba');
+          return http.Response(
+            jsonEncode({'message': 'Sesión cerrada correctamente.'}),
+            200,
+          );
+        }),
+        baseUrl: 'https://ejemplo.cl/api/v1/',
+        accessToken: 'token_prueba',
+      );
+
+      try {
+        await servicio.cerrarSesion();
+      } finally {
+        servicio.close();
+      }
+    });
+
+    test('Envía el área al registrar un evento', () async {
+      final servicio = ApiService(
+        client: MockClient((request) async {
+          expect(request.body, contains('name="id_area"'));
+          return http.Response(jsonEncode({'id_evento': 125}), 201);
+        }),
+        baseUrl: 'https://ejemplo.cl/api/v1/',
+        accessToken: 'token_prueba',
+      );
+
+      try {
+        final evento = await servicio.registrarEvento(
+          idTipoEvento: 4,
+          condicion: 1,
+          descripcion: 'Evento con área',
+          referencia: 'Sector de mantenimiento',
+          idProyecto: 1,
+          esParaMi: true,
+          idArea: 7,
+        );
+        expect(evento['id_evento'], 125);
+      } finally {
+        servicio.close();
+      }
+    });
+
+    test('Traduce los estados de Laravel a los de la app', () {
+      expect(ApiService.estadoParaApp('abierto'), 'ABIERTA');
+      expect(ApiService.estadoParaApp('en_revision'), 'ABIERTA');
+      expect(ApiService.estadoParaApp('cerrado'), 'CERRADA');
+      expect(ApiService.estadoParaApp('cerrada'), 'CERRADA');
+    });
+
   });
 }

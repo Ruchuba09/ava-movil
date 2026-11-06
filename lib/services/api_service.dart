@@ -35,6 +35,52 @@ class ApiService {
     }
   }
 
+  /// Traduce `EstadoEvento` de Laravel a los estados que maneja la app.
+  ///
+  /// `en_revision` cuenta como abierta porque el evento sigue pendiente de
+  /// cierre, igual que en el filtro "abierto" del backend. Se aceptan también
+  /// los valores antiguos que pueden seguir en la caché offline.
+  static String estadoParaApp(Object? estado) {
+    final valor = estado.toString().toLowerCase();
+    return switch (valor) {
+      'abierto' || 'abierta' || 'en_revision' || 'proceso' => 'ABIERTA',
+      'cerrado' || 'cerrada' => 'CERRADA',
+      _ => valor.toUpperCase(),
+    };
+  }
+
+  /// URL de una evidencia privada. Requiere enviar el token en la cabecera.
+  static Uri urlArchivoEvento(
+    int idEvento,
+    String ruta, {
+    String baseUrl = configuredBaseUrl,
+  }) {
+    final archivo = Uri.encodeComponent(ruta.split(RegExp(r'[/\\]')).last);
+    return _resolver(baseUrl, 'eventos/$idEvento/archivos/$archivo');
+  }
+
+  Future<void> cerrarSesion() async {
+    final response = await _client
+        .post(_endpoint('logout'), headers: _headers())
+        .timeout(timeout);
+
+    _decodeResponse(response);
+  }
+
+  Future<Map<String, dynamic>> obtenerEvento(int idEvento) async {
+    final response = await _client
+        .get(_endpoint('eventos/$idEvento'), headers: _headers())
+        .timeout(timeout);
+
+    final body = _decodeResponse(response);
+
+    if (body is! Map<String, dynamic>) {
+      throw const FormatException('Laravel no devolvió un evento válido.');
+    }
+
+    return body;
+  }
+
   Future<String> iniciarSesion({
     required String rut,
     required String password,
@@ -197,6 +243,7 @@ class ApiService {
     required int idProyecto,
     required bool esParaMi,
     int? idTrabajador,
+    int? idArea,
     List<XFile> evidencias = const [],
   }) async {
     if (evidencias.length > 3) {
@@ -220,6 +267,7 @@ class ApiService {
       'es_para_mi': esParaMi ? '1' : '0',
       if (!esParaMi && idTrabajador != null)
         'id_trabajador': idTrabajador.toString(),
+      if (idArea != null) 'id_area': idArea.toString(),
     });
 
     for (final evidencia in evidencias) {
@@ -274,14 +322,16 @@ class ApiService {
     return headers;
   }
 
-  Uri _endpoint(String resource) {
-    final configuredUrl = _baseUrl.trim();
+  Uri _endpoint(String resource) => _resolver(_baseUrl, resource);
+
+  static Uri _resolver(String baseUrl, String resource) {
+    final configuredUrl = baseUrl.trim();
 
     if (configuredUrl.isEmpty) {
       throw StateError(
         'API_BASE_URL no está configurada. '
         'Inicia la aplicación con '
-        '--dart-define=API_BASE_URL=https://servidor/api/v1/',
+        '--dart-define=API_BASE_URL=https://localhost:8080/api/v1/',
       );
     }
 
@@ -296,7 +346,7 @@ class ApiService {
         uri.query.isNotEmpty ||
         uri.fragment.isNotEmpty) {
       throw ArgumentError.value(
-        _baseUrl,
+        baseUrl,
         'baseUrl',
         'Debe ser una URL HTTP(S) sin credenciales, '
             'query ni fragmento.',

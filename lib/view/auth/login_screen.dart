@@ -100,7 +100,13 @@ class _LoginScreenState extends State<LoginScreen> {
         rut: _emailController.text.trim(),
         password: _passwordController.text,
       );
-      final profile = await servicio.obtenerUsuarioAutenticado();
+      final servicioAutenticado = ApiService(accessToken: token);
+      final Map<String, dynamic> profile;
+      try {
+        profile = await servicioAutenticado.obtenerUsuarioAutenticado();
+      } finally {
+        servicioAutenticado.close();
+      }
 
       if (!mounted) return;
 

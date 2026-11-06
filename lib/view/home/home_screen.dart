@@ -282,7 +282,23 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Sin conexión no se puede revocar el token, pero la sesión local se borra.
+  Future<void> _revocarToken() async {
+    final servicio = ApiService(
+      accessToken: widget.accessToken,
+      timeout: const Duration(seconds: 5),
+    );
+    try {
+      await servicio.cerrarSesion();
+    } catch (error) {
+      debugPrint('No se pudo revocar el token en Laravel: $error');
+    } finally {
+      servicio.close();
+    }
+  }
+
   Future<void> _signOut() async {
+    await _revocarToken();
     try {
       await OfflineSessionStore().clear();
     } catch (error) {
