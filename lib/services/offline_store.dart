@@ -115,6 +115,70 @@ class OfflineStore {
     return jsonDecode(rows.single['payload_json'] as String);
   }
 
+  /// Guarda una lista larga en varias filas: en Android, SQLite no puede leer
+  /// una sola fila de más de 2 MB. Reemplaza la lista anterior de una vez.
+  Future<void> saveJsonList({
+    required String userKey,
+    required String key,
+    required List<dynamic> value,
+    int partSize = 500,
+  }) async {
+    _validateKey(userKey, 'userKey');
+    _validateKey(key, 'key');
+
+    final updatedAt = DateTime.now().toUtc().toIso8601String();
+    final db = await AvaMovilDatabase.instance.database;
+    await db.transaction((txn) async {
+      await txn.delete(
+        'offline_cache',
+        where: 'user_key = ? AND (cache_key = ? OR cache_key LIKE ?)',
+        whereArgs: [userKey, key, '$key.parte.%'],
+      );
+      for (var part = 0; part * partSize < value.length; part++) {
+        final start = part * partSize;
+        final end = (start + partSize).clamp(0, value.length);
+        await txn.insert('offline_cache', {
+          'user_key': userKey,
+          'cache_key': '$key.parte.$part',
+          'payload_json': jsonEncode(
+            _withoutCredentials(value.sublist(start, end)),
+          ),
+          'updated_at': updatedAt,
+        });
+      }
+    });
+  }
+
+  /// Lee una lista guardada por partes, o una guardada antes en una sola fila.
+  Future<List<dynamic>?> readJsonList({
+    required String userKey,
+    required String key,
+  }) async {
+    _validateKey(userKey, 'userKey');
+    _validateKey(key, 'key');
+
+    final db = await AvaMovilDatabase.instance.database;
+    final rows = await db.query(
+      'offline_cache',
+      columns: ['cache_key', 'payload_json'],
+      where: 'user_key = ? AND cache_key LIKE ?',
+      whereArgs: [userKey, '$key.parte.%'],
+    );
+
+    if (rows.isEmpty) {
+      final previous = await readJson(userKey: userKey, key: key);
+      return previous is List ? previous : null;
+    }
+
+    int part(Map<String, Object?> row) =>
+        int.parse((row['cache_key'] as String).split('.').last);
+    final ordered = [...rows]..sort((a, b) => part(a) - part(b));
+    return [
+      for (final row in ordered)
+        ...jsonDecode(row['payload_json'] as String) as List,
+    ];
+  }
+
   Future<List<SyncQueueEntry>> pendingReports(String userKey) async {
     final entries = await const SyncQueue().pending(limit: 500);
     return entries

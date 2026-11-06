@@ -12,6 +12,7 @@ import 'package:avamovil/view/reports/report_qr_scanner_screen.dart';
 import 'package:avamovil/view/permissions/permissions_screen.dart';
 import 'package:avamovil/controller/theme_controller.dart';
 import 'package:avamovil/services/api_service.dart';
+import 'package:avamovil/services/offline_reports_sync.dart';
 import 'package:avamovil/services/offline_store.dart';
 import 'package:avamovil/services/offline_sync_service.dart';
 
@@ -74,7 +75,42 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _comprobarProyectos();
-    _syncPendingReports();
+    _syncPendingReports().whenComplete(_descargarReportesParaSinConexion);
+  }
+
+  /// Corre en segundo plano y después de subir lo pendiente, para que la copia
+  /// local ya incluya esos reportes. Usa su propio cliente: sigue aunque se
+  /// cambie de pantalla.
+  Future<void> _descargarReportesParaSinConexion() async {
+    final demoData = DemoData.instance;
+    if (!demoData.isApiSession) return;
+
+    final userKey = _userKey;
+    final servicio = ApiService(accessToken: widget.accessToken);
+    try {
+      await OfflineReportsSync.instance.sincronizar(
+        userKey: userKey,
+        clave: OfflineStore.myReportsKey,
+        pedirPagina: (pagina) => servicio.obtenerMisReportes(
+          pagina: pagina,
+          porPagina: OfflineReportsSync.porPagina,
+        ),
+      );
+      if (!demoData.isWorker) {
+        await OfflineReportsSync.instance.sincronizar(
+          userKey: userKey,
+          clave: OfflineStore.teamReportsKey,
+          pedirPagina: (pagina) => servicio.obtenerReportesMiCuadrilla(
+            pagina: pagina,
+            porPagina: OfflineReportsSync.porPagina,
+          ),
+        );
+      }
+    } catch (error) {
+      debugPrint('No se pudieron guardar los reportes offline: $error');
+    } finally {
+      servicio.close();
+    }
   }
 
   Future<void> _syncPendingReports() async {
@@ -109,12 +145,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<Widget> get _widgetOptions => [
     NewReportScreen(accessToken: widget.accessToken, userKey: _userKey),
+    // Sin key, Flutter reutilizaría el estado y ambas pestañas mostrarían la misma lista.
     ReportsScreen(
+      key: const ValueKey('reportes-equipo'),
       accessToken: widget.accessToken,
       userKey: _userKey,
       onlyCurrentTeam: true,
     ),
     ReportsScreen(
+      key: const ValueKey('reportes-propios'),
       accessToken: widget.accessToken,
       userKey: _userKey,
       onlyCurrentUser: true,

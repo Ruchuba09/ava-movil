@@ -8,7 +8,14 @@ class ApiException implements Exception {
   final int statusCode;
   final String message;
 
-  const ApiException({required this.statusCode, required this.message});
+  /// Segundos que Laravel pide esperar cuando responde 429.
+  final int? retryAfter;
+
+  const ApiException({
+    required this.statusCode,
+    required this.message,
+    this.retryAfter,
+  });
 
   @override
   String toString() => 'ApiException($statusCode): $message';
@@ -446,7 +453,11 @@ class ApiService {
           ? body['message'] as String
           : 'La solicitud a la API falló.';
 
-      throw ApiException(statusCode: response.statusCode, message: message);
+      throw ApiException(
+        statusCode: response.statusCode,
+        message: message,
+        retryAfter: int.tryParse(response.headers['retry-after'] ?? ''),
+      );
     }
 
     return body;

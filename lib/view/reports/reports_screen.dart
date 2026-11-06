@@ -5,6 +5,7 @@ import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/widgets/selection_field.dart';
 import 'package:avamovil/services/api_service.dart';
+import 'package:avamovil/services/offline_reports_sync.dart';
 import 'package:avamovil/services/offline_store.dart';
 import 'package:avamovil/view/reports/report_detail_screen.dart';
 
@@ -34,8 +35,7 @@ class ReportsScreen extends StatefulWidget {
 
 class _ReportsScreenState extends State<ReportsScreen> {
   List<Map<String, dynamic>> _eventosReales = [];
-  /// Eventos tal como llegan de Laravel: es lo que se guarda para usar sin conexión.
-  List<dynamic> _eventosCrudos = [];
+  EstadoSincronizacion? _estadoCache;
   bool _cargandoEventos = false;
   bool _cargaInicialHecha = false;
   bool _mostrandoCacheOffline = false;
@@ -149,22 +149,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return servicio.obtenerEventos(pagina: pagina, filtros: filtros);
   }
 
-  /// Solo el listado sin filtros representa los reportes del usuario.
-  Future<void> _guardarParaSinConexion() async {
-    if (_filtrosServidor.isNotEmpty) return;
-    try {
-      await _offlineStore.saveJson(
-        userKey: _userKey,
-        key: widget.onlyCurrentUser
-            ? OfflineStore.myReportsKey
-            : OfflineStore.teamReportsKey,
-        value: _eventosCrudos,
-      );
-    } catch (error) {
-      debugPrint('No se pudieron guardar localmente los reportes: $error');
-    }
-  }
-
   void _aplicarFiltro(VoidCallback cambio) {
     setState(cambio);
     _cargarEventos();
@@ -186,7 +170,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
       final locales = _eventosReales.where((r) => r['pendingSync'] == true);
       setState(() {
-        _eventosCrudos = [..._eventosCrudos, ...pagina.eventos];
         _eventosReales = [
           ..._eventosReales.where((r) => r['pendingSync'] != true),
           ...pagina.eventos.map(
@@ -199,7 +182,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
         _hayMas = pagina.hayMas;
         _total = pagina.total;
       });
-      await _guardarParaSinConexion();
     } catch (error) {
       debugPrint('No se pudo cargar la página siguiente: $error');
       if (mounted && solicitud == _solicitud) {
@@ -228,7 +210,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
       if (!mounted || solicitud != _solicitud) return;
 
       setState(() {
-        _eventosCrudos = pagina.eventos;
         _eventosReales = pagina.eventos
             .map(
               (evento) =>
@@ -246,7 +227,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
         }
         _mostrandoCacheOffline = false;
       });
-      await _guardarParaSinConexion();
 
       debugPrint(
         'Eventos recibidos desde Laravel: ${_eventosReales.length} de $_total',
@@ -279,11 +259,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
       final cacheKey = widget.onlyCurrentUser
           ? OfflineStore.myReportsKey
           : OfflineStore.teamReportsKey;
-      Object? cachedReports;
+      List<dynamic>? cachedReports;
+      EstadoSincronizacion? estadoCache;
       try {
-        cachedReports = await _offlineStore.readJson(
+        cachedReports = await _offlineStore.readJsonList(
           userKey: _userKey,
           key: cacheKey,
+        );
+        estadoCache = await OfflineReportsSync.instance.estado(
+          userKey: _userKey,
+          clave: cacheKey,
         );
       } catch (cacheError) {
         debugPrint('No se pudieron leer los reportes guardados: $cacheError');
@@ -298,8 +283,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
       }
       if (!mounted) return;
       final cachedList = cachedReports;
-      if (cachedList is List) {
+      if (cachedList != null) {
         setState(() {
+          _estadoCache = estadoCache;
           _eventosReales = cachedList
               .whereType<Map>()
               .map(
@@ -481,12 +467,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
           children: [
             if (_cargandoEventos) const LinearProgressIndicator(minHeight: 2),
             if (_mostrandoCacheOffline)
-              const ListTile(
-                leading: Icon(Icons.cloud_off_outlined),
-                title: Text('Modo sin conexión'),
-                subtitle: Text(
-                  'Estos datos corresponden a la última sincronización.',
-                ),
+              ListTile(
+                leading: const Icon(Icons.cloud_off_outlined),
+                title: const Text('Modo sin conexión'),
+                subtitle: Text(_textoEstadoCache()),
                 dense: true,
               ),
             Padding(
@@ -918,6 +902,21 @@ class _ReportsScreenState extends State<ReportsScreen> {
         );
       },
     );
+  }
+
+  String _textoEstadoCache() {
+    final estado = _estadoCache;
+    if (estado == null) {
+      return 'Estos datos corresponden a la última sincronización.';
+    }
+
+    final fecha = estado.fecha;
+    final texto =
+        'Sincronizado el ${_formatDate(fecha)} a las '
+        '${fecha.hour.toString().padLeft(2, '0')}:${fecha.minute.toString().padLeft(2, '0')}';
+    return estado.completa
+        ? '$texto.'
+        : '$texto. La descarga no terminó: pueden faltar reportes.';
   }
 
   /// Al aparecer el final de la lista se pide la página siguiente.
