@@ -572,51 +572,52 @@ class _HomeScreenState extends State<HomeScreen> {
                             });
                           },
                         ),
-                        ExpansionTile(
-                          leading: const Icon(Icons.people_outline),
-                          title: Text(
-                            'Visualización y equipo (${workers.length})',
-                          ),
-                          children: [
-                            ListTile(
-                              contentPadding: const EdgeInsets.only(
-                                left: 56,
-                                right: 16,
-                              ),
-                              leading: const Icon(Icons.visibility_outlined),
-                              title: const Text('Visualización de cuadrilla'),
-                              onTap: () {
-                                Navigator.pop(context);
-                                setState(() => _showPermissions = true);
-                              },
+                        if (!demoData.isApiSession)
+                          ExpansionTile(
+                            leading: const Icon(Icons.people_outline),
+                            title: Text(
+                              'Visualización y equipo (${workers.length})',
                             ),
-                            ...workers.map(
-                              (worker) => ListTile(
-                                dense: true,
+                            children: [
+                              ListTile(
                                 contentPadding: const EdgeInsets.only(
                                   left: 56,
                                   right: 16,
                                 ),
-                                leading: const Icon(
-                                  Icons.person_outline,
-                                  size: 18,
-                                ),
-                                title: Text(worker['name'] as String),
-                                subtitle: Text(worker['role'] as String),
+                                leading: const Icon(Icons.visibility_outlined),
+                                title: const Text('Visualización de cuadrilla'),
                                 onTap: () {
                                   Navigator.pop(context);
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          WorkerProfileScreen(worker: worker),
-                                    ),
-                                  );
+                                  setState(() => _showPermissions = true);
                                 },
                               ),
-                            ),
-                          ],
-                        ),
+                              ...workers.map(
+                                (worker) => ListTile(
+                                  dense: true,
+                                  contentPadding: const EdgeInsets.only(
+                                    left: 56,
+                                    right: 16,
+                                  ),
+                                  leading: const Icon(
+                                    Icons.person_outline,
+                                    size: 18,
+                                  ),
+                                  title: Text(worker['name'] as String),
+                                  subtitle: Text(worker['role'] as String),
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            WorkerProfileScreen(worker: worker),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
                       ],
                     ),
                   ),

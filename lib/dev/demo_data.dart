@@ -178,6 +178,10 @@ class DemoData extends ChangeNotifier {
   bool get isWorker =>
       _authenticatedAsWorker ?? (currentUser['leaderId'] is int);
 
+  /// La sesión viene de Laravel. Sus IDs pueden coincidir con los de la demo, así
+  /// que las vistas que solo tienen datos ficticios no deben mostrarse.
+  bool get isApiSession => _authenticatedAsWorker != null;
+
   bool get canScanReportQr {
     final role = currentUser['role'] as String;
     final normalizedRole = role.toUpperCase();
@@ -375,9 +379,13 @@ class DemoData extends ChangeNotifier {
     notifyListeners();
   }
 
-  List<Map<String, dynamic>> get currentUserNotifications => notifications
-      .where((notification) => notification['recipientId'] == currentUser['id'])
-      .toList();
+  List<Map<String, dynamic>> get currentUserNotifications => isApiSession
+      ? <Map<String, dynamic>>[]
+      : notifications
+            .where(
+              (notification) => notification['recipientId'] == currentUser['id'],
+            )
+            .toList();
 
   int get unreadNotificationCount => currentUserNotifications
       .where((notification) => notification['read'] == false)
@@ -419,10 +427,13 @@ class DemoData extends ChangeNotifier {
         profile['trabajador'] ??
         profile['usuario_trabajador'] ??
         profile['usuarioTrabajador'];
+    // Todo usuario de Laravel puede tener id_trabajador, incluso los de gestión:
+    // ese dato no basta para decidir la vista; primero se mira el rol.
     final isWorker =
-        profile['id_trabajador'] is num ||
-        workerRelation is Map ||
-        _isWorkerRole(role);
+        !_hasManagementRole(profile) &&
+        (profile['id_trabajador'] is num ||
+            workerRelation is Map ||
+            _isWorkerRole(role));
 
     if (role.isEmpty && !isWorker) {
       throw const FormatException(
@@ -477,6 +488,21 @@ class DemoData extends ChangeNotifier {
     }
 
     return '';
+  }
+
+  /// Roles con acceso a los listados de gestión en Laravel (`EventoPolicy`).
+  bool _hasManagementRole(Map<String, dynamic> profile) {
+    final roles = profile['roles'];
+    return [
+      profile['role'],
+      profile['rol'],
+      if (roles is List) ...roles,
+    ].any((rol) {
+      final nombre = rol is Map ? rol['name'] ?? rol['nombre'] : rol;
+      if (nombre is! String) return false;
+      final normalizado = nombre.trim().toLowerCase();
+      return normalizado == 'administrador' || normalizado == 'supervisor';
+    });
   }
 
   bool _isWorkerRole(String role) {
