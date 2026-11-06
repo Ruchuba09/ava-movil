@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:avamovil/services/evidence_rules.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -11,6 +12,25 @@ class ApiException implements Exception {
 
   @override
   String toString() => 'ApiException($statusCode): $message';
+}
+
+/// Una página de eventos de Laravel, con los proyectos que se pueden filtrar.
+class PaginaEventos {
+  final List<dynamic> eventos;
+  final int pagina;
+  final int ultimaPagina;
+  final int total;
+  final List<Map<String, dynamic>> proyectos;
+
+  const PaginaEventos({
+    required this.eventos,
+    required this.pagina,
+    required this.ultimaPagina,
+    required this.total,
+    required this.proyectos,
+  });
+
+  bool get hayMas => pagina < ultimaPagina;
 }
 
 class ApiService {
@@ -158,57 +178,86 @@ class ApiService {
     return Map<String, dynamic>.from(usuario);
   }
 
-  Future<List<dynamic>> obtenerEventos() async {
+  Future<PaginaEventos> obtenerEventos({
+    int pagina = 1,
+    int porPagina = 30,
+    Map<String, String> filtros = const {},
+  }) => _obtenerPagina('eventos', pagina, porPagina, filtros);
+
+  Future<PaginaEventos> obtenerMisReportes({
+    int pagina = 1,
+    int porPagina = 30,
+    Map<String, String> filtros = const {},
+  }) => _obtenerPagina('eventos/mis-reportes', pagina, porPagina, filtros);
+
+  Future<PaginaEventos> obtenerReportesMiCuadrilla({
+    int pagina = 1,
+    int porPagina = 30,
+    Map<String, String> filtros = const {},
+  }) => _obtenerPagina('eventos/mi-cuadrilla', pagina, porPagina, filtros);
+
+  Future<PaginaEventos> _obtenerPagina(
+    String recurso,
+    int pagina,
+    int porPagina,
+    Map<String, String> filtros,
+  ) async {
+    final uri = _endpoint(recurso).replace(
+      queryParameters: {
+        ...filtros,
+        'page': '$pagina',
+        'per_page': '$porPagina',
+      },
+    );
+
     final response = await _client
-        .get(_endpoint('eventos'), headers: _headers())
+        .get(uri, headers: _headers())
         .timeout(timeout);
 
     final body = _decodeResponse(response);
 
-    if (body is! List) {
+    if (body is! Map || body['data'] is! List) {
       throw const FormatException(
-        'Laravel debe devolver una lista de eventos.',
+        'Laravel debe devolver una página de eventos.',
       );
     }
 
-    return body;
+    return PaginaEventos(
+      eventos: body['data'] as List,
+      pagina: (body['current_page'] as num?)?.toInt() ?? pagina,
+      ultimaPagina: (body['last_page'] as num?)?.toInt() ?? pagina,
+      total: (body['total'] as num?)?.toInt() ?? 0,
+      proyectos: ((body['proyectos'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((proyecto) => Map<String, dynamic>.from(proyecto))
+          .toList(),
+    );
   }
 
-  Future<List<dynamic>> obtenerMisReportes() async {
+  /// Descarga una evidencia privada, enviando el token de la sesión.
+  Future<Uint8List> descargarArchivo(Uri url) async {
     final response = await _client
-        .get(_endpoint('eventos/mis-reportes'), headers: _headers())
-        .timeout(timeout);
+        .get(url, headers: _headers())
+        .timeout(const Duration(seconds: 60));
 
-    final body = _decodeResponse(response);
-
-    if (body is! List) {
-      throw const FormatException(
-        'Laravel debe devolver una lista de mis reportes.',
-      );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return response.bodyBytes;
     }
 
-    return body;
+    _decodeResponse(response);
+    throw ApiException(
+      statusCode: response.statusCode,
+      message: 'No se pudo descargar el archivo.',
+    );
   }
 
-  Future<List<dynamic>> obtenerReportesMiCuadrilla() async {
-    final response = await _client
-        .get(_endpoint('eventos/mi-cuadrilla'), headers: _headers())
-        .timeout(timeout);
-
-    final body = _decodeResponse(response);
-
-    if (body is! List) {
-      throw const FormatException(
-        'Laravel debe devolver una lista de reportes de la cuadrilla.',
-      );
-    }
-
-    return body;
-  }
-
+  /// PHP no procesa archivos en un PATCH real, por eso se envía un POST
+  /// multipart con `_method=PATCH`, igual que el formulario web.
   Future<Map<String, dynamic>> cerrarEvento({
     required int idEvento,
     required String justificacion,
+    DateTime? fechaReinicio,
+    List<XFile> evidencias = const [],
   }) async {
     final texto = justificacion.trim();
 
@@ -218,13 +267,24 @@ class ApiService {
       );
     }
 
-    final response = await _client
-        .patch(
-          _endpoint('eventos/$idEvento/cerrar'),
-          headers: {..._headers(), 'Content-Type': 'application/json'},
-          body: jsonEncode({'justificacion': texto}),
-        )
-        .timeout(timeout);
+    final request = http.MultipartRequest(
+      'POST',
+      _endpoint('eventos/$idEvento/cerrar'),
+    );
+
+    request.headers.addAll(_headers());
+    request.fields.addAll({
+      '_method': 'PATCH',
+      'justificacion': texto,
+      if (fechaReinicio != null)
+        'fecha_reinicio': fechaReinicio.toUtc().toIso8601String(),
+    });
+    await _adjuntarEvidencias(request, 'evidencia_cierre[]', evidencias);
+
+    final streamedResponse = await _client.send(request).timeout(timeout);
+    final response = await http.Response.fromStream(
+      streamedResponse,
+    ).timeout(timeout);
 
     final body = _decodeResponse(response);
 
@@ -233,6 +293,32 @@ class ApiService {
     }
 
     return body;
+  }
+
+  Future<void> _adjuntarEvidencias(
+    http.MultipartRequest request,
+    String campo,
+    List<XFile> evidencias,
+  ) async {
+    if (evidencias.length > 3) {
+      throw ArgumentError('Se permiten máximo 3 evidencias.');
+    }
+
+    for (final evidencia in evidencias) {
+      if (!isAllowedEvidence(evidencia.name)) {
+        throw ArgumentError('${evidencia.name}: $evidenceTypesMessage');
+      }
+
+      final bytes = await evidencia.readAsBytes();
+
+      if (bytes.length > maxEvidenceBytes) {
+        throw ArgumentError('Cada evidencia debe pesar máximo 5 MB.');
+      }
+
+      request.files.add(
+        http.MultipartFile.fromBytes(campo, bytes, filename: evidencia.name),
+      );
+    }
   }
 
   Future<Map<String, dynamic>> registrarEvento({
@@ -246,10 +332,6 @@ class ApiService {
     int? idArea,
     List<XFile> evidencias = const [],
   }) async {
-    if (evidencias.length > 3) {
-      throw ArgumentError('Se permiten máximo 3 evidencias.');
-    }
-
     if (!esParaMi && idTrabajador == null) {
       throw ArgumentError('Debe seleccionar a la persona reportada.');
     }
@@ -270,21 +352,7 @@ class ApiService {
       if (idArea != null) 'id_area': idArea.toString(),
     });
 
-    for (final evidencia in evidencias) {
-      final bytes = await evidencia.readAsBytes();
-
-      if (bytes.length > 5 * 1024 * 1024) {
-        throw ArgumentError('Cada evidencia debe pesar máximo 5 MB.');
-      }
-
-      request.files.add(
-        http.MultipartFile.fromBytes(
-          'evidencia[]',
-          bytes,
-          filename: evidencia.name,
-        ),
-      );
-    }
+    await _adjuntarEvidencias(request, 'evidencia[]', evidencias);
 
     final streamedResponse = await _client.send(request).timeout(timeout);
 

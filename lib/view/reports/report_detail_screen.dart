@@ -5,7 +5,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:avamovil/dev/demo_data.dart';
+import 'package:avamovil/services/evidence_rules.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/reports/camera_access.dart';
 import 'package:avamovil/view/reports/report_qr_screen.dart';
@@ -38,6 +40,41 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   bool _showReportEvidence = false;
   bool _showActivityLog = false;
   bool _cerrandoEvento = false;
+  DateTime? _fechaReinicio;
+
+  /// Laravel exige la hora de reinicio si el trabajo se detuvo.
+  bool get _requiereReinicio {
+    final tipo = widget.report['stopType'];
+    return tipo == 'parcial' || tipo == 'total';
+  }
+
+  Future<void> _elegirFechaReinicio() async {
+    final ahora = DateTime.now();
+    final detencion = widget.report['stopDate'];
+    final fecha = await showDatePicker(
+      context: context,
+      initialDate: _fechaReinicio ?? ahora,
+      firstDate: detencion is DateTime ? detencion : DateTime(2020),
+      lastDate: ahora,
+    );
+    if (fecha == null || !mounted) return;
+
+    final hora = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_fechaReinicio ?? ahora),
+    );
+    if (hora == null || !mounted) return;
+
+    setState(() {
+      _fechaReinicio = DateTime(
+        fecha.year,
+        fecha.month,
+        fecha.day,
+        hora.hour,
+        hora.minute,
+      );
+    });
+  }
 
   @override
   void initState() {
@@ -85,7 +122,8 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.attach_file),
-              title: const Text('Elegir archivos o videos'),
+              title: const Text('Elegir archivos'),
+              subtitle: const Text('JPG, PNG, PDF, DOC o DOCX'),
               onTap: () => Navigator.pop(context, 'files'),
             ),
           ],
@@ -106,7 +144,8 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         );
       } else {
         final result = await FilePicker.pickFiles(
-          type: FileType.any,
+          type: FileType.custom,
+          allowedExtensions: evidenceExtensions,
           allowMultiple: true,
         );
         paths.addAll(
@@ -115,10 +154,18 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
               .map((file) => file.path!),
         );
       }
-      if (paths.isEmpty || !mounted) return;
+      if (!mounted) return;
+      // La galería puede entregar WEBP o HEIC, que Laravel rechazaría.
+      final allowed = paths.where(isAllowedEvidence).toList();
+      if (allowed.length < paths.length) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(evidenceTypesMessage)),
+        );
+      }
+      if (allowed.isEmpty) return;
       final availableSlots = 3 - _evidence.length;
-      setState(() => _evidence.addAll(paths.take(availableSlots)));
-      if (paths.length > availableSlots) {
+      setState(() => _evidence.addAll(allowed.take(availableSlots)));
+      if (allowed.length > availableSlots) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Puedes adjuntar un máximo de 3 evidencias.'),
@@ -166,12 +213,24 @@ Future<void> _closeReport() async {
     return;
   }
 
-  if (_evidence.isNotEmpty) {
+  if (_requiereReinicio && _fechaReinicio == null) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
+        content: Text('Indica la fecha y hora en que se reinició el trabajo.'),
+      ),
+    );
+    return;
+  }
+
+  final detencion = widget.report['stopDate'];
+  if (_requiereReinicio &&
+      detencion is DateTime &&
+      _fechaReinicio!.isBefore(detencion)) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
         content: Text(
-          'El envío de evidencias de cierre aún no está integrado. '
-          'Quita los archivos para continuar.',
+          'El reinicio no puede ser anterior a la detención '
+          '(${_formatDateTime(detencion)}).',
         ),
       ),
     );
@@ -202,12 +261,18 @@ Future<void> _closeReport() async {
 
   setState(() => _cerrandoEvento = true);
 
-  final servicio = ApiService(accessToken: token);
+  // Los archivos pueden tardar más en subir que una consulta normal.
+  final servicio = ApiService(
+    accessToken: token,
+    timeout: const Duration(seconds: 60),
+  );
 
   try {
     final resultado = await servicio.cerrarEvento(
       idEvento: id,
       justificacion: justificacion,
+      fechaReinicio: _requiereReinicio ? _fechaReinicio : null,
+      evidencias: _evidence.map(XFile.new).toList(),
     );
 
     if (!mounted) return;
@@ -224,8 +289,9 @@ Future<void> _closeReport() async {
   } catch (error) {
     if (!mounted) return;
 
+    final detalle = error is ApiException ? error.message : '$error';
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('No se pudo cerrar el evento: $error')),
+      SnackBar(content: Text('No se pudo cerrar el evento: $detalle')),
     );
   } finally {
     servicio.close();
@@ -449,6 +515,21 @@ Future<void> _closeReport() async {
                               ? 'Ingrese la descripción del cierre'
                               : null,
                         ),
+                        if (_requiereReinicio) ...[
+                          const SizedBox(height: 16),
+                          OutlinedButton.icon(
+                            onPressed: _elegirFechaReinicio,
+                            icon: const Icon(Icons.event_available),
+                            label: Text(
+                              _fechaReinicio == null
+                                  ? 'Fecha y hora de reinicio del trabajo'
+                                  : 'Reinicio: ${_formatDateTime(_fechaReinicio!)}',
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(48),
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 16),
                         const Text('Evidencia del cierre (máx. 3 archivos)'),
                         const SizedBox(height: 8),
@@ -766,9 +847,55 @@ Future<void> _closeReport() async {
     caseSensitive: false,
   ).hasMatch(_evidencePath(path));
 
+  /// Los documentos son privados: se descargan con el token a un archivo
+  /// temporal y se abren con la aplicación que el teléfono tenga para ese tipo.
+  Future<void> _openRemoteFile(String path) async {
+    final uri = _remoteEvidenceUri(path);
+    if (uri == null) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Descargando archivo...')),
+    );
+
+    final servicio = ApiService(accessToken: widget.accessToken);
+    try {
+      final bytes = await servicio.descargarArchivo(uri);
+      final nombre = Uri.decodeComponent(
+        uri.pathSegments.last,
+      ).replaceAll(RegExp(r'[^\w.\-]'), '_');
+      final directorio = await getTemporaryDirectory();
+      final destino = File('${directorio.path}${Platform.pathSeparator}$nombre');
+      await destino.writeAsBytes(bytes, flush: true);
+
+      final result = await OpenFilex.open(destino.path);
+      messenger.hideCurrentSnackBar();
+      if (result.type != ResultType.done) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('No se pudo abrir el archivo: ${result.message}'),
+          ),
+        );
+      }
+    } catch (error) {
+      messenger.hideCurrentSnackBar();
+      final detalle = error is ApiException ? error.message : '$error';
+      messenger.showSnackBar(
+        SnackBar(content: Text('No se pudo abrir el archivo: $detalle')),
+      );
+    } finally {
+      servicio.close();
+    }
+  }
+
   Future<void> _openEvidence(String path) async {
     if (kIsWeb || _isRemoteEvidence(path)) {
-      if (!_isImagePath(path)) {
+      if (_isImagePath(path)) {
+        await _showImageEvidence(path);
+        return;
+      }
+
+      if (kIsWeb) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -779,7 +906,7 @@ Future<void> _closeReport() async {
         return;
       }
 
-      await _showImageEvidence(path);
+      await _openRemoteFile(path);
       return;
     }
 

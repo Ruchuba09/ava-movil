@@ -467,7 +467,7 @@ void main() {
         expect(request.method, 'GET');
         expect(
           request.url.toString(),
-          'https://ejemplo.cl/api/v1/eventos',
+          'https://ejemplo.cl/api/v1/eventos?estado=abierto&page=2&per_page=30',
         );
         expect(
           request.headers['Authorization'],
@@ -475,15 +475,23 @@ void main() {
         );
 
         return http.Response(
-          jsonEncode([
-            {
-              'id_evento': 501,
-              'id_proyecto': 1,
-              'condicion': 1,
-              'referencia': 'PRUEBA INTEGRACIÓN AVA MÓVIL',
-              'estado': 'abierta',
-            },
-          ]),
+          jsonEncode({
+            'data': [
+              {
+                'id_evento': 501,
+                'id_proyecto': 1,
+                'condicion': 1,
+                'referencia': 'PRUEBA INTEGRACIÓN AVA MÓVIL',
+                'estado': 'abierta',
+              },
+            ],
+            'current_page': 2,
+            'last_page': 3,
+            'total': 61,
+            'proyectos': [
+              {'id_proyecto': 1, 'nombre': 'Montaje Planta Norte'},
+            ],
+          }),
           200,
           headers: {'content-type': 'application/json'},
         );
@@ -496,11 +504,16 @@ void main() {
       );
 
       try {
-        final eventos = await servicio.obtenerEventos();
+        final pagina = await servicio.obtenerEventos(
+          pagina: 2,
+          filtros: {'estado': 'abierto'},
+        );
 
-        expect(eventos.length, 1);
-        expect(eventos.first['id_evento'], 501);
-        expect(eventos.first['estado'], 'abierta');
+        expect(pagina.eventos.length, 1);
+        expect(pagina.eventos.first['id_evento'], 501);
+        expect(pagina.total, 61);
+        expect(pagina.hayMas, isTrue);
+        expect(pagina.proyectos.first['id_proyecto'], 1);
       } finally {
         servicio.close();
       }
@@ -522,16 +535,18 @@ void main() {
         client: MockClient((request) async {
           expect(
             request.url.toString(),
-            'https://ejemplo.cl/api/v1/eventos/mi-cuadrilla',
+            'https://ejemplo.cl/api/v1/eventos/mi-cuadrilla?page=1&per_page=30',
           );
-          return http.Response('[]', 200);
+          return http.Response(jsonEncode({'data': []}), 200);
         }),
         baseUrl: 'https://ejemplo.cl/api/v1/',
         accessToken: 'token_prueba',
       );
 
       try {
-        expect(await servicio.obtenerReportesMiCuadrilla(), isEmpty);
+        final pagina = await servicio.obtenerReportesMiCuadrilla();
+        expect(pagina.eventos, isEmpty);
+        expect(pagina.hayMas, isFalse);
       } finally {
         servicio.close();
       }
@@ -605,6 +620,109 @@ void main() {
           idArea: 7,
         );
         expect(evento['id_evento'], 125);
+      } finally {
+        servicio.close();
+      }
+    });
+
+    test('Cierra un evento con reinicio y evidencia de cierre', () async {
+      final servicio = ApiService(
+        client: MockClient((request) async {
+          expect(request.method, 'POST');
+          expect(
+            request.url.toString(),
+            'https://ejemplo.cl/api/v1/eventos/9/cerrar',
+          );
+          final cuerpo = request.body;
+          expect(cuerpo, contains('name="_method"'));
+          expect(cuerpo, contains('PATCH'));
+          expect(cuerpo, contains('name="justificacion"'));
+          expect(cuerpo, contains('name="fecha_reinicio"'));
+          expect(cuerpo, contains('2026-11-05T15:30:00.000Z'));
+          expect(cuerpo, contains('name="evidencia_cierre[]"'));
+          expect(cuerpo, contains('filename="cierre.pdf"'));
+          return http.Response(jsonEncode({'estado': 'cerrado'}), 200);
+        }),
+        baseUrl: 'https://ejemplo.cl/api/v1/',
+        accessToken: 'token_prueba',
+      );
+
+      try {
+        final evento = await servicio.cerrarEvento(
+          idEvento: 9,
+          justificacion: 'Área asegurada',
+          fechaReinicio: DateTime.utc(2026, 11, 5, 15, 30),
+          evidencias: [XFile.fromData(utf8.encode('pdf'), path: 'cierre.pdf')],
+        );
+        expect(ApiService.estadoParaApp(evento['estado']), 'CERRADA');
+      } finally {
+        servicio.close();
+      }
+    });
+
+    test('Rechaza antes de enviar los archivos que Laravel no acepta', () async {
+      final servicio = ApiService(
+        client: MockClient((_) async => fail('No debe llegar al servidor')),
+        baseUrl: 'https://ejemplo.cl/api/v1/',
+        accessToken: 'token_prueba',
+      );
+
+      try {
+        for (final nombre in ['foto.webp', 'video.mp4', 'foto.heic', 'sin_ext']) {
+          await expectLater(
+            servicio.cerrarEvento(
+              idEvento: 9,
+              justificacion: 'Prueba',
+              evidencias: [XFile.fromData(utf8.encode('x'), path: nombre)],
+            ),
+            throwsArgumentError,
+            reason: nombre,
+          );
+        }
+      } finally {
+        servicio.close();
+      }
+    });
+
+    test('Descarga un archivo con el token y sin decodificarlo', () async {
+      final bytes = [0x25, 0x50, 0x44, 0x46, 0xFF, 0x00];
+      final servicio = ApiService(
+        client: MockClient((request) async {
+          expect(request.headers['Authorization'], 'Bearer token_prueba');
+          return http.Response.bytes(bytes, 200);
+        }),
+        baseUrl: 'https://ejemplo.cl/api/v1/',
+        accessToken: 'token_prueba',
+      );
+
+      try {
+        expect(
+          await servicio.descargarArchivo(
+            Uri.parse('https://ejemplo.cl/api/v1/eventos/1/archivos/a.pdf'),
+          ),
+          bytes,
+        );
+      } finally {
+        servicio.close();
+      }
+    });
+
+    test('Informa el error al descargar un archivo', () async {
+      final servicio = ApiService(
+        client: MockClient(
+          (_) async => http.Response(jsonEncode({'message': 'Sin permiso'}), 403),
+        ),
+        baseUrl: 'https://ejemplo.cl/api/v1/',
+        accessToken: 'token_prueba',
+      );
+
+      try {
+        await expectLater(
+          servicio.descargarArchivo(Uri.parse('https://ejemplo.cl/a.pdf')),
+          throwsA(
+            isA<ApiException>().having((e) => e.statusCode, 'status', 403),
+          ),
+        );
       } finally {
         servicio.close();
       }

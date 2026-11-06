@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
@@ -32,8 +34,20 @@ class ReportsScreen extends StatefulWidget {
 
 class _ReportsScreenState extends State<ReportsScreen> {
   List<Map<String, dynamic>> _eventosReales = [];
+  /// Eventos tal como llegan de Laravel: es lo que se guarda para usar sin conexión.
+  List<dynamic> _eventosCrudos = [];
   bool _cargandoEventos = false;
+  bool _cargaInicialHecha = false;
   bool _mostrandoCacheOffline = false;
+  bool _cargandoMas = false;
+  bool _errorCargandoMas = false;
+  int _pagina = 1;
+  bool _hayMas = false;
+  int _total = 0;
+  Map<String, int> _idsProyecto = {};
+  // Permite descartar una respuesta si los filtros cambiaron mientras tanto.
+  int _solicitud = 0;
+  Timer? _esperaBusqueda;
   late String _statusFilter;
   late String _projectFilter;
   String _conditionFilter = 'Todas';
@@ -72,9 +86,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
       'project': proyecto?['nombre'] ?? 'Proyecto desconocido',
       'condition': '#$condicionNumero',
       'conditionText':
-          condicionNumero >= 1 && condicionNumero <= DemoData.conditions.length
-          ? DemoData.conditions[condicionNumero - 1]
-          : 'Condición no especificada',
+          evento['condicion_nombre'] ??
+          (condicionNumero >= 1 && condicionNumero <= DemoData.conditions.length
+              ? DemoData.conditions[condicionNumero - 1]
+              : 'Condición no especificada'),
       'reference': evento['referencia'] ?? '',
       'description': evento['descripcion'] ?? '',
       'status': isPendingOffline
@@ -90,59 +105,154 @@ class _ReportsScreenState extends State<ReportsScreen> {
       'subject': 'No especificado',
       'evidence': evento['evidencia'] ?? [],
       'closeEvidence': evento['evidencia_cierre'] ?? [],
+      'closeDescription': evento['justificacion'] ?? '',
+      'stopType': evento['tipo_detencion'],
+      'stopDate': DateTime.tryParse(
+        evento['fecha_detencion']?.toString() ?? '',
+      )?.toLocal(),
     };
   }
 
+  /// Filtros que resuelve Laravel, ya que la app solo tiene parte de los datos.
+  Map<String, String> get _filtrosServidor {
+    final idProyecto = _idsProyecto[_projectFilter];
+    final condicion = _conditionFilter.replaceFirst('#', '');
+    final idInterna = RegExp(
+      r'^#?(\d+)$',
+    ).firstMatch(_internalIdController.text.trim())?.group(1);
+
+    return {
+      if (idProyecto != null) 'id_proyecto': '$idProyecto',
+      if (_conditionFilter != 'Todas') 'condicion': condicion,
+      if (_statusFilter == 'Abierta') 'estado': 'abierto',
+      if (_statusFilter == 'Cerrada') 'estado': 'cerrado',
+      if (idInterna != null) 'id_evento': idInterna,
+      if (_fromDate != null) 'fecha_inicio': _fechaParaServidor(_fromDate!),
+      if (_toDate != null) 'fecha_fin': _fechaParaServidor(_toDate!),
+    };
+  }
+
+  String _fechaParaServidor(DateTime fecha) =>
+      '${fecha.year}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}';
+
+  Future<PaginaEventos> _pedirPagina(ApiService servicio, int pagina) {
+    final filtros = _filtrosServidor;
+    if (widget.onlyCurrentUser) {
+      return servicio.obtenerMisReportes(pagina: pagina, filtros: filtros);
+    }
+    if (widget.onlyCurrentTeam) {
+      return servicio.obtenerReportesMiCuadrilla(
+        pagina: pagina,
+        filtros: filtros,
+      );
+    }
+    return servicio.obtenerEventos(pagina: pagina, filtros: filtros);
+  }
+
+  /// Solo el listado sin filtros representa los reportes del usuario.
+  Future<void> _guardarParaSinConexion() async {
+    if (_filtrosServidor.isNotEmpty) return;
+    try {
+      await _offlineStore.saveJson(
+        userKey: _userKey,
+        key: widget.onlyCurrentUser
+            ? OfflineStore.myReportsKey
+            : OfflineStore.teamReportsKey,
+        value: _eventosCrudos,
+      );
+    } catch (error) {
+      debugPrint('No se pudieron guardar localmente los reportes: $error');
+    }
+  }
+
+  void _aplicarFiltro(VoidCallback cambio) {
+    setState(cambio);
+    _cargarEventos();
+  }
+
+  Future<void> _cargarMas() async {
+    if (_cargandoMas || !_hayMas || _mostrandoCacheOffline) return;
+
+    final solicitud = _solicitud;
+    setState(() {
+      _cargandoMas = true;
+      _errorCargandoMas = false;
+    });
+
+    final servicio = ApiService(accessToken: widget.accessToken);
+    try {
+      final pagina = await _pedirPagina(servicio, _pagina + 1);
+      if (!mounted || solicitud != _solicitud) return;
+
+      final locales = _eventosReales.where((r) => r['pendingSync'] == true);
+      setState(() {
+        _eventosCrudos = [..._eventosCrudos, ...pagina.eventos];
+        _eventosReales = [
+          ..._eventosReales.where((r) => r['pendingSync'] != true),
+          ...pagina.eventos.map(
+            (evento) =>
+                _adaptarEvento(Map<String, dynamic>.from(evento as Map)),
+          ),
+          ...locales,
+        ];
+        _pagina = pagina.pagina;
+        _hayMas = pagina.hayMas;
+        _total = pagina.total;
+      });
+      await _guardarParaSinConexion();
+    } catch (error) {
+      debugPrint('No se pudo cargar la página siguiente: $error');
+      if (mounted && solicitud == _solicitud) {
+        setState(() => _errorCargandoMas = true);
+      }
+    } finally {
+      servicio.close();
+      if (mounted) setState(() => _cargandoMas = false);
+    }
+  }
+
   Future<void> _cargarEventos() async {
-    setState(() => _cargandoEventos = true);
+    final solicitud = ++_solicitud;
+    setState(() {
+      _cargandoEventos = true;
+      _cargandoMas = false;
+      _errorCargandoMas = false;
+    });
 
     final servicio = ApiService(accessToken: widget.accessToken);
     var permiteDatosLocales = true;
 
     try {
-      final eventos = widget.onlyCurrentUser
-          ? await servicio.obtenerMisReportes()
-          : widget.onlyCurrentTeam
-          ? await servicio.obtenerReportesMiCuadrilla()
-          : await servicio.obtenerEventos();
+      final pagina = await _pedirPagina(servicio, 1);
 
-      if (!mounted) return;
+      if (!mounted || solicitud != _solicitud) return;
 
       setState(() {
-        _eventosReales = eventos
+        _eventosCrudos = pagina.eventos;
+        _eventosReales = pagina.eventos
             .map(
               (evento) =>
                   _adaptarEvento(Map<String, dynamic>.from(evento as Map)),
             )
             .toList();
+        _pagina = pagina.pagina;
+        _hayMas = pagina.hayMas;
+        _total = pagina.total;
+        if (pagina.proyectos.isNotEmpty) {
+          _idsProyecto = {
+            for (final proyecto in pagina.proyectos)
+              proyecto['nombre'] as String: proyecto['id_proyecto'] as int,
+          };
+        }
         _mostrandoCacheOffline = false;
       });
-      try {
-        await _offlineStore.saveJson(
-          userKey: _userKey,
-          key: widget.onlyCurrentUser
-              ? OfflineStore.myReportsKey
-              : OfflineStore.teamReportsKey,
-          value: eventos,
-        );
-      } catch (error) {
-        debugPrint('No se pudieron guardar localmente los reportes: $error');
-      }
+      await _guardarParaSinConexion();
 
       debugPrint(
-        'Eventos reales recibidos desde Laravel: ${_eventosReales.length}',
+        'Eventos recibidos desde Laravel: ${_eventosReales.length} de $_total',
       );
-
-      debugPrint(
-        'Evento 501 encontrado: ${_eventosReales.any((e) => e['id_evento'] == 501)}',
-      );
-      for (final evento in _eventosReales) {
-        if (evento['id_evento'] == 501) {
-          debugPrint('Estructura del evento 501: $evento');
-          break;
-        }
-      }
     } catch (error) {
+      if (solicitud != _solicitud) return;
       final origen = widget.onlyCurrentUser
           ? 'eventos/mis-reportes'
           : widget.onlyCurrentTeam
@@ -197,6 +307,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
               )
               .toList();
           _mostrandoCacheOffline = true;
+          _hayMas = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -216,24 +327,30 @@ class _ReportsScreenState extends State<ReportsScreen> {
     } finally {
       servicio.close();
 
-      if (mounted && permiteDatosLocales) {
-        try {
-          await _appendPendingReports();
-        } catch (error) {
-          debugPrint(
-            'No se pudieron leer los reportes locales pendientes: $error',
-          );
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('No se pudieron leer los cambios pendientes.'),
-              ),
+      // Si los filtros cambiaron, esta carga ya no es la vigente.
+      if (solicitud == _solicitud) {
+        if (mounted && permiteDatosLocales) {
+          try {
+            await _appendPendingReports();
+          } catch (error) {
+            debugPrint(
+              'No se pudieron leer los reportes locales pendientes: $error',
             );
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('No se pudieron leer los cambios pendientes.'),
+                ),
+              );
+            }
           }
         }
-        if (mounted) setState(() => _cargandoEventos = false);
-      } else if (mounted) {
-        setState(() => _cargandoEventos = false);
+        if (mounted && solicitud == _solicitud) {
+          setState(() {
+            _cargandoEventos = false;
+            _cargaInicialHecha = true;
+          });
+        }
       }
     }
   }
@@ -271,6 +388,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   @override
   void dispose() {
+    _esperaBusqueda?.cancel();
     _internalIdController.dispose();
     super.dispose();
   }
@@ -285,7 +403,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       lastDate: DateTime(2035),
     );
     if (selected != null) {
-      setState(() {
+      _aplicarFiltro(() {
         _fromDate = selected.start;
         _toDate = selected.end;
       });
@@ -300,7 +418,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final demoData = DemoData.instance;
-    if (_cargandoEventos) {
+    // Al recargar se mantiene la pantalla para no perder los filtros abiertos.
+    if (_cargandoEventos && !_cargaInicialHecha) {
       return const Center(child: CircularProgressIndicator());
     }
 
@@ -344,16 +463,23 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ? demoData.openReportsFirst(matchingReports)
             : matchingReports;
         final projectNames =
-            _eventosReales
-                .map((report) => report['project'])
-                .whereType<String>()
-                .toSet()
-                .toList()
+            {
+              ..._idsProyecto.keys,
+              ..._eventosReales
+                  .map((report) => report['project'])
+                  .whereType<String>(),
+              if (_projectFilter != 'Todos los proyectos') _projectFilter,
+            }.toList()
               ..sort();
+        final totalReportes =
+            _mostrandoCacheOffline || filteredReports.length > _total
+            ? filteredReports.length
+            : _total;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (_cargandoEventos) const LinearProgressIndicator(minHeight: 2),
             if (_mostrandoCacheOffline)
               const ListTile(
                 leading: Icon(Icons.cloud_off_outlined),
@@ -430,7 +556,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                             .toList(),
                                     onChanged: (value) {
                                       if (value != null) {
-                                        setState(() => _projectFilter = value);
+                                        _aplicarFiltro(
+                                          () => _projectFilter = value,
+                                        );
                                       }
                                     },
                                   ),
@@ -479,7 +607,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                     ],
                                     onChanged: (value) {
                                       if (value != null) {
-                                        setState(
+                                        _aplicarFiltro(
                                           () => _conditionFilter = value,
                                         );
                                       }
@@ -501,7 +629,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                         .toList(),
                                     onChanged: (value) {
                                       if (value != null) {
-                                        setState(() => _statusFilter = value);
+                                        _aplicarFiltro(
+                                          () => _statusFilter = value,
+                                        );
                                       }
                                     },
                                   ),
@@ -523,7 +653,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                         borderRadius: BorderRadius.circular(8),
                                       ),
                                     ),
-                                    onChanged: (_) => setState(() {}),
+                                    onChanged: (_) {
+                                      setState(() {});
+                                      _esperaBusqueda?.cancel();
+                                      _esperaBusqueda = Timer(
+                                        const Duration(milliseconds: 400),
+                                        () {
+                                          if (mounted) _cargarEventos();
+                                        },
+                                      );
+                                    },
                                   ),
                                 ),
                                 SizedBox(
@@ -550,7 +689,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                       if (_fromDate != null || _toDate != null)
                                         IconButton(
                                           tooltip: 'Limpiar fechas',
-                                          onPressed: () => setState(() {
+                                          onPressed: () => _aplicarFiltro(() {
                                             _fromDate = null;
                                             _toDate = null;
                                           }),
@@ -572,7 +711,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: Text(
-                '${filteredReports.length} reportes',
+                '$totalReportes reportes',
                 style: Theme.of(context).textTheme.labelMedium,
               ),
             ),
@@ -584,8 +723,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       ),
                     )
                   : ListView.builder(
-                      itemCount: filteredReports.length,
+                      itemCount: filteredReports.length + (_hayMas ? 1 : 0),
                       itemBuilder: (context, index) {
+                        if (index == filteredReports.length) {
+                          return _pieDeLista();
+                        }
                         final report = filteredReports[index];
                         final isOpen = report['status'] == 'ABIERTA';
                         final isThirdParty = report['isThirdParty'] == true;
@@ -775,6 +917,33 @@ class _ReportsScreenState extends State<ReportsScreen> {
           ],
         );
       },
+    );
+  }
+
+  /// Al aparecer el final de la lista se pide la página siguiente.
+  Widget _pieDeLista() {
+    if (_errorCargandoMas) {
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: Center(
+          child: OutlinedButton.icon(
+            onPressed: _cargarMas,
+            icon: const Icon(Icons.refresh),
+            label: const Text('No se pudo cargar. Reintentar'),
+          ),
+        ),
+      );
+    }
+
+    if (!_cargandoMas) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _cargarMas();
+      });
+    }
+
+    return const Padding(
+      padding: EdgeInsets.all(16),
+      child: Center(child: CircularProgressIndicator()),
     );
   }
 

@@ -14,6 +14,7 @@ import 'package:avamovil/view/reports/report_qr_screen.dart';
 import 'package:avamovil/view/widgets/selection_field.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:avamovil/services/api_service.dart';
+import 'package:avamovil/services/evidence_rules.dart';
 import 'package:avamovil/services/offline_store.dart';
 import 'package:http/http.dart' as http;
 
@@ -225,6 +226,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
             ListTile(
               leading: const Icon(Icons.attach_file),
               title: const Text('Elegir archivos'),
+              subtitle: const Text('JPG, PNG, PDF, DOC o DOCX'),
               onTap: () => Navigator.pop(context, 'files'),
             ),
           ],
@@ -243,17 +245,28 @@ class _NewReportScreenState extends State<NewReportScreen> {
         picked.addAll(await ImagePicker().pickMultiImage());
       } else {
         final result = await FilePicker.pickFiles(
-          type: FileType.any,
+          type: FileType.custom,
+          allowedExtensions: evidenceExtensions,
           allowMultiple: true,
         );
         for (final file in result?.files ?? <PlatformFile>[]) {
           if (file.path != null) picked.add(XFile(file.path!, name: file.name));
         }
       }
-      if (picked.isEmpty || !mounted) return;
+      if (!mounted) return;
+      // La galería puede entregar WEBP o HEIC, que Laravel rechazaría.
+      final allowed = picked
+          .where((file) => isAllowedEvidence(file.name))
+          .toList();
+      if (allowed.length < picked.length) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(evidenceTypesMessage)),
+        );
+      }
+      if (allowed.isEmpty) return;
       final availableSlots = 3 - _evidence.length;
-      setState(() => _evidence.addAll(picked.take(availableSlots)));
-      if (picked.length > availableSlots) {
+      setState(() => _evidence.addAll(allowed.take(availableSlots)));
+      if (allowed.length > availableSlots) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Puedes adjuntar un máximo de 3 archivos.'),
@@ -628,14 +641,18 @@ class _NewReportScreenState extends State<NewReportScreen> {
               hint: 'Seleccione la condición identificada',
               value: _selectedConditionId,
               options: _condicionesPare.map((condition) {
-                final id = condition['id_condicion'] ?? condition['id'];
+                final id = (condition['id_condicion'] ?? condition['id']) as num;
                 final label =
-                    condition['nombre'] ??
-                    condition['descripcion'] ??
-                    condition['detalle'];
+                    (condition['nombre'] ??
+                            condition['descripcion'] ??
+                            condition['detalle'])
+                        .toString();
                 return SelectionOption<int>(
-                  value: (id as num).toInt(),
-                  label: label.toString(),
+                  value: id.toInt(),
+                  // El catálogo de Laravel no trae el número; la copia local sí.
+                  label: RegExp(r'^\d').hasMatch(label)
+                      ? label
+                      : '${id.toInt().toString().padLeft(2, '0')}. $label',
                 );
               }).toList(),
               onChanged: (value) {

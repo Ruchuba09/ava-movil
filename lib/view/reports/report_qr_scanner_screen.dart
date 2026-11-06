@@ -198,10 +198,10 @@ Future<void> _handleDetection(BarcodeCapture capture) async {
       'displayId': '#$idEvento',
       'project': proyecto?['nombre'] ?? 'Proyecto desconocido',
       'condition': '#$condicion',
-      'conditionText': condicion >= 1 &&
-              condicion <= DemoData.conditions.length
-          ? DemoData.conditions[condicion - 1]
-          : 'Condición no especificada',
+      'conditionText': evento['condicion_nombre'] ??
+          (condicion >= 1 && condicion <= DemoData.conditions.length
+              ? DemoData.conditions[condicion - 1]
+              : 'Condición no especificada'),
       'reference': evento['referencia'] ?? '',
       'description': evento['descripcion'] ?? '',
       'status': ApiService.estadoParaApp(evento['estado']),
@@ -214,6 +214,11 @@ Future<void> _handleDetection(BarcodeCapture capture) async {
       'subject': 'No especificado',
       'evidence': evento['evidencia'] ?? [],
       'closeEvidence': evento['evidencia_cierre'] ?? [],
+      'closeDescription': evento['justificacion'] ?? '',
+      'stopType': evento['tipo_detencion'],
+      'stopDate': DateTime.tryParse(
+        evento['fecha_detencion']?.toString() ?? '',
+      )?.toLocal(),
     };
 
     await Navigator.of(context).pushReplacement(
