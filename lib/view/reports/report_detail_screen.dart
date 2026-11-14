@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -14,18 +16,25 @@ import 'package:avamovil/view/reports/report_qr_screen.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:avamovil/services/api_service.dart';
+import 'package:avamovil/services/conectividad.dart';
+import 'package:avamovil/services/evidence_cache.dart';
+import 'package:avamovil/services/offline_store.dart';
+import 'package:avamovil/database/avamovil_db.dart';
+import 'package:avamovil/database/sync_queue.dart';
 
 
 class ReportDetailScreen extends StatefulWidget {
   final Map<String, dynamic> report;
   final bool isLider;
   final String? accessToken;
+  final String? userKey;
 
   const ReportDetailScreen({
     super.key,
     required this.report,
     this.isLider = true,
     this.accessToken,
+    this.userKey,
   });
 
 
@@ -37,6 +46,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _descController = TextEditingController();
   final List<String> _evidence = [];
+  final Map<String, Future<File?>> _archivosEvidencia = {};
   bool _showReportEvidence = false;
   bool _showActivityLog = false;
   bool _cerrandoEvento = false;
@@ -195,10 +205,10 @@ Future<void> _closeReport() async {
   final token = widget.accessToken;
   final justificacion = _descController.text.trim();
 
-  if (id is! int || token == null || token.isEmpty) {
+  if (id is! int) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('No se puede cerrar: faltan datos de autenticación.'),
+        content: Text('No se puede cerrar: el evento no tiene número.'),
       ),
     );
     return;
@@ -261,6 +271,14 @@ Future<void> _closeReport() async {
 
   setState(() => _cerrandoEvento = true);
 
+  // Sin conexión (o sin token, si se entró sin conexión tras cerrar sesión)
+  // el cierre se guarda y se envía al recuperar la señal.
+  if (token == null || token.isEmpty || Conectividad.instance.sinConexion) {
+    await _guardarCierreSinConexion(id, justificacion);
+    if (mounted) setState(() => _cerrandoEvento = false);
+    return;
+  }
+
   // Los archivos pueden tardar más en subir que una consulta normal.
   final servicio = ApiService(
     accessToken: token,
@@ -289,6 +307,13 @@ Future<void> _closeReport() async {
   } catch (error) {
     if (!mounted) return;
 
+    // Un timeout es ambiguo (Laravel pudo cerrar el evento), así que sólo se
+    // guarda para después si la petición claramente no llegó.
+    if (Conectividad.esFallaDeRed(error) && error is! TimeoutException) {
+      await _guardarCierreSinConexion(id, justificacion);
+      return;
+    }
+
     final detalle = error is ApiException ? error.message : '$error';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('No se pudo cerrar el evento: $detalle')),
@@ -301,42 +326,70 @@ Future<void> _closeReport() async {
   }
 }
 
-  List<String> _normalizarEvidencias(dynamic valor) {
-    if (valor == null) return [];
+  /// Deja el cierre en la cola de sincronización, igual que un reporte nuevo
+  /// creado sin conexión.
+  Future<void> _guardarCierreSinConexion(int id, String justificacion) async {
+    try {
+      final evidencias = <Map<String, Object?>>[];
+      for (final ruta in _evidence) {
+        final archivo = XFile(ruta);
+        final bytes = await archivo.readAsBytes();
+        if (bytes.length > 5 * 1024 * 1024) {
+          throw ArgumentError('Cada evidencia debe pesar máximo 5 MB.');
+        }
+        evidencias.add({
+          'name': archivo.name,
+          'bytes_base64': base64Encode(bytes),
+        });
+      }
 
-    if (valor is String) {
-      final texto = valor.trim();
-      return texto.isEmpty ? [] : [texto];
+      final userKey =
+          widget.userKey ??
+          OfflineStore.userKeyFor(DemoData.instance.currentUser);
+      final db = await AvaMovilDatabase.instance.database;
+      await db.transaction((transaction) async {
+        await const SyncQueue().enqueue(
+          executor: transaction,
+          entity: 'eventos',
+          recordId: id,
+          operation: 'cerrar',
+          payload: {
+            'user_key': userKey,
+            'id_evento': id,
+            'justificacion': justificacion,
+            if (_requiereReinicio && _fechaReinicio != null)
+              'fecha_reinicio': _fechaReinicio!.toUtc().toIso8601String(),
+            'evidencias': evidencias,
+            'fecha_cierre_local': DateTime.now().toUtc().toIso8601String(),
+          },
+        );
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Cierre del evento N.º $id guardado en este dispositivo. '
+            'Se enviará a Laravel al recuperar conexión.',
+          ),
+        ),
+      );
+      Navigator.of(context).pop(true);
+    } catch (error) {
+      debugPrint('No se pudo guardar el cierre sin conexión: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo guardar el cierre: $error')),
+        );
+      }
     }
-
-    if (valor is Map) {
-      final archivo = valor['archivo'] ?? valor['ruta'] ?? valor['path'];
-      return archivo is String && archivo.trim().isNotEmpty
-          ? [archivo]
-          : [];
-    }
-
-    if (valor is List) {
-      return valor.expand((item) => _normalizarEvidencias(item)).toList();
-    }
-
-    return [];
   }
 
-  /// Laravel guarda rutas del disco privado; se sirven desde la API con token.
-  List<String> _evidenciasDelServidor(List<String> rutas) {
-    final idEvento = widget.report['id_evento'];
-    if (idEvento is! int || ApiService.configuredBaseUrl.trim().isEmpty) {
-      return rutas;
-    }
-    return rutas
-        .map(
-          (ruta) => _isRemoteEvidence(ruta)
-              ? ruta
-              : ApiService.urlArchivoEvento(idEvento, ruta).toString(),
-        )
-        .toList();
-  }
+  List<String> _normalizarEvidencias(dynamic valor) =>
+      EvidenceCache.normalizar(valor);
+
+  List<String> _evidenciasDelServidor(List<String> rutas) =>
+      EvidenceCache.urlsDelServidor(widget.report['id_evento'], rutas);
 
   @override
   Widget build(BuildContext context) {
@@ -784,6 +837,53 @@ Future<void> _closeReport() async {
       child: const Icon(Icons.broken_image_outlined, size: 36),
     );
 
+    if (!kIsWeb && _isRemoteEvidence(path)) {
+      final uri = _remoteEvidenceUri(path);
+      if (uri == null) return placeholder;
+
+      // Se usa la copia guardada en el teléfono; si no está, se descarga y
+      // queda guardada para verla después sin conexión.
+      final archivo = _archivosEvidencia.putIfAbsent(
+        uri.toString(),
+        () => EvidenceCache.instance
+            .archivo(uri.toString(), accessToken: widget.accessToken)
+            .catchError((Object error) {
+              debugPrint('No se pudo cargar la evidencia $uri: $error');
+              return null;
+            }),
+      );
+      return FutureBuilder<File?>(
+        future: archivo,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return SizedBox(
+              width: width,
+              height: height,
+              child: const Center(child: CircularProgressIndicator()),
+            );
+          }
+          final file = snapshot.data;
+          if (file == null) {
+            return SizedBox(
+              width: width,
+              height: height,
+              child: const Tooltip(
+                message: 'Foto no disponible sin conexión',
+                child: Icon(Icons.cloud_off, size: 36),
+              ),
+            );
+          }
+          return Image.file(
+            file,
+            width: width,
+            height: height,
+            fit: fit,
+            errorBuilder: (context, error, stackTrace) => placeholder,
+          );
+        },
+      );
+    }
+
     if (kIsWeb || _isRemoteEvidence(path)) {
       final uri = _remoteEvidenceUri(path);
       if (uri == null) return placeholder;
@@ -810,30 +910,9 @@ Future<void> _closeReport() async {
     );
   }
 
-  bool _isRemoteEvidence(String path) {
-    final uri = Uri.tryParse(path);
-    return (uri?.scheme == 'http' || uri?.scheme == 'https') ||
-        path.startsWith('/storage/') ||
-        path.startsWith('storage/');
-  }
+  bool _isRemoteEvidence(String path) => EvidenceCache.esRemota(path);
 
-  Uri? _remoteEvidenceUri(String path) {
-    final uri = Uri.tryParse(path);
-    if (uri == null) return null;
-    if (uri.hasScheme) {
-      return uri.scheme == 'http' || uri.scheme == 'https' ? uri : null;
-    }
-
-    final baseUri = Uri.tryParse(ApiService.configuredBaseUrl);
-    if (baseUri == null ||
-        !baseUri.hasAuthority ||
-        (baseUri.scheme != 'http' && baseUri.scheme != 'https')) {
-      return null;
-    }
-
-    final serverRoot = baseUri.replace(path: '/', query: null, fragment: null);
-    return serverRoot.resolve(path.startsWith('/') ? path.substring(1) : path);
-  }
+  Uri? _remoteEvidenceUri(String path) => EvidenceCache.uriRemota(path);
 
   String _evidencePath(String path) => Uri.tryParse(path)?.path ?? path;
 
@@ -858,9 +937,15 @@ Future<void> _closeReport() async {
       const SnackBar(content: Text('Descargando archivo...')),
     );
 
-    final servicio = ApiService(accessToken: widget.accessToken);
     try {
-      final bytes = await servicio.descargarArchivo(uri);
+      final guardado = await EvidenceCache.instance.archivo(
+        uri.toString(),
+        accessToken: widget.accessToken,
+      );
+      if (guardado == null) {
+        throw const SinConexionException();
+      }
+      final bytes = await guardado.readAsBytes();
       final nombre = Uri.decodeComponent(
         uri.pathSegments.last,
       ).replaceAll(RegExp(r'[^\w.\-]'), '_');
@@ -883,8 +968,6 @@ Future<void> _closeReport() async {
       messenger.showSnackBar(
         SnackBar(content: Text('No se pudo abrir el archivo: $detalle')),
       );
-    } finally {
-      servicio.close();
     }
   }
 

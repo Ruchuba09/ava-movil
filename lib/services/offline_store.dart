@@ -24,6 +24,7 @@ class OfflineStore {
       'id_user',
       'id_trabajador',
       'trabajador_id',
+      'rut',
       'name',
       'nombre',
       'role',
@@ -186,6 +187,19 @@ class OfflineStore {
           (entry) =>
               entry.entity == 'eventos' &&
               entry.operation == 'crear' &&
+              entry.payload?['user_key'] == userKey,
+        )
+        .toList(growable: false);
+  }
+
+  /// Cierres de eventos hechos sin conexión que aún no llegan a Laravel.
+  Future<List<SyncQueueEntry>> pendingClosures(String userKey) async {
+    final entries = await const SyncQueue().pending(limit: 500);
+    return entries
+        .where(
+          (entry) =>
+              entry.entity == 'eventos' &&
+              entry.operation == 'cerrar' &&
               entry.payload?['user_key'] == userKey,
         )
         .toList(growable: false);

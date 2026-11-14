@@ -5,6 +5,7 @@ import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/widgets/selection_field.dart';
 import 'package:avamovil/services/api_service.dart';
+import 'package:avamovil/services/conectividad.dart';
 import 'package:avamovil/services/offline_reports_sync.dart';
 import 'package:avamovil/services/offline_store.dart';
 import 'package:avamovil/view/reports/report_detail_screen.dart';
@@ -64,7 +65,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
     super.initState();
     _statusFilter = widget.initialStatusFilter;
     _projectFilter = widget.initialProjectFilter;
+    Conectividad.instance.addListener(_alCambiarConexion);
     _cargarEventos();
+  }
+
+  /// Al volver la señal se reemplaza la copia local por los datos al día.
+  void _alCambiarConexion() {
+    if (mounted &&
+        _mostrandoCacheOffline &&
+        !Conectividad.instance.sinConexion) {
+      _cargarEventos();
+    }
   }
 
   Map<String, dynamic> _adaptarEvento(Map<String, dynamic> evento) {
@@ -165,6 +176,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     final servicio = ApiService(accessToken: widget.accessToken);
     try {
+      Conectividad.instance.exigirConexion();
       final pagina = await _pedirPagina(servicio, _pagina + 1);
       if (!mounted || solicitud != _solicitud) return;
 
@@ -205,6 +217,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
     var permiteDatosLocales = true;
 
     try {
+      // Sin conexión se muestra al tiro la copia local, sin esperar timeout.
+      Conectividad.instance.exigirConexion();
       final pagina = await _pedirPagina(servicio, 1);
 
       if (!mounted || solicitud != _solicitud) return;
@@ -295,13 +309,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
           _mostrandoCacheOffline = true;
           _hayMas = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Sin conexión: mostrando los últimos reportes sincronizados.',
+        // Si ya se sabía que no hay conexión, la franja de la pantalla de
+        // inicio lo indica; el aviso sólo hace falta cuando la red falló recién.
+        if (error is! SinConexionException) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Sin conexión: mostrando los últimos reportes sincronizados.',
+              ),
             ),
-          ),
-        );
+          );
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -342,6 +360,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Future<void> _appendPendingReports() async {
+    await _applyPendingClosures();
     final pendingEntries = await _offlineStore.pendingReports(_userKey);
     if (!mounted || pendingEntries.isEmpty) return;
 
@@ -372,8 +391,32 @@ class _ReportsScreenState extends State<ReportsScreen> {
     _eventosReales = reports;
   }
 
+  /// Los eventos cerrados sin conexión se muestran cerrados mientras el
+  /// cierre espera para enviarse a Laravel.
+  Future<void> _applyPendingClosures() async {
+    final closures = await _offlineStore.pendingClosures(_userKey);
+    if (!mounted || closures.isEmpty) return;
+
+    final byEvent = {
+      for (final entry in closures) entry.payload!['id_evento']: entry.payload!,
+    };
+    _eventosReales = [
+      for (final report in _eventosReales)
+        if (byEvent[report['id_evento']] case final payload?)
+          {
+            ...report,
+            'status': 'CERRADA',
+            'closeDescription': payload['justificacion'] ?? '',
+            'closePendingSync': true,
+          }
+        else
+          report,
+    ];
+  }
+
   @override
   void dispose() {
+    Conectividad.instance.removeListener(_alCambiarConexion);
     _esperaBusqueda?.cancel();
     _internalIdController.dispose();
     super.dispose();
@@ -766,6 +809,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                         widget.canCloseReports &&
                                         DemoData.instance.puedeCerrarEventos,
                                     accessToken: widget.accessToken,
+                                    userKey: _userKey,
                                   ),
                                 ),
                               );

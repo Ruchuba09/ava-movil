@@ -14,6 +14,7 @@ import 'package:avamovil/view/reports/report_qr_screen.dart';
 import 'package:avamovil/view/widgets/selection_field.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:avamovil/services/api_service.dart';
+import 'package:avamovil/services/conectividad.dart';
 import 'package:avamovil/services/evidence_rules.dart';
 import 'package:avamovil/services/offline_store.dart';
 import 'package:http/http.dart' as http;
@@ -84,6 +85,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
     final servicio = ApiService(accessToken: widget.accessToken);
 
     try {
+      Conectividad.instance.exigirConexion();
       final opciones = await servicio.obtenerOpcionesEventos();
       _applyEventOptions(opciones);
       try {
@@ -308,6 +310,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
     final servicio = ApiService(accessToken: widget.accessToken);
 
     try {
+      Conectividad.instance.exigirConexion();
       final evento = await servicio.registrarEvento(
         idTipoEvento: _tipoEventoPare,
         condicion: condicionId,
@@ -353,6 +356,8 @@ class _NewReportScreenState extends State<NewReportScreen> {
               ReportQrScreen(report: reporte, isNewReport: true),
         ),
       );
+    } on SinConexionException catch (error) {
+      await _queueReportOffline(proyectoId, condicionId, error);
     } on SocketException catch (error) {
       await _queueReportOffline(proyectoId, condicionId, error);
     } on http.ClientException catch (error) {

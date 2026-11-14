@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:avamovil/services/conectividad.dart';
 import 'package:avamovil/services/evidence_rules.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -55,7 +56,7 @@ class ApiService {
     String? baseUrl,
     this.accessToken,
     this.timeout = const Duration(seconds: 20),
-  }) : _client = client ?? http.Client(),
+  }) : _client = ClienteConConectividad(client ?? http.Client(), timeout),
        _baseUrl = baseUrl ?? configuredBaseUrl {
     if (timeout <= Duration.zero) {
       throw ArgumentError.value(timeout, 'timeout', 'Debe ser positivo.');

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:avamovil/dev/demo_data.dart';
 import 'package:avamovil/services/api_service.dart';
+import 'package:avamovil/services/conectividad.dart';
+import 'package:avamovil/services/offline_auth.dart';
 import 'package:avamovil/services/offline_store.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/home/home_screen.dart';
@@ -14,74 +16,70 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
+  final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
-  bool _isRestoringOfflineSession = true;
-  OfflineSession? _offlineSession;
-  Map<String, dynamic>? _offlineProfile;
-  String? _offlineSessionError;
+  bool _restaurandoSesion = true;
 
   final OfflineStore _offlineStore = OfflineStore();
-  final OfflineSessionStore _offlineSessionStore = OfflineSessionStore();
+  final OfflineAuthService _offlineAuth = OfflineAuthService();
 
   @override
   void initState() {
     super.initState();
-    _restoreOfflineSession();
+    _restaurarSesion();
+  }
+
+  /// Si la app se cerró con la sesión abierta, entra directo con los datos
+  /// guardados, haya o no conexión.
+  Future<void> _restaurarSesion() async {
+    try {
+      final login = await _offlineAuth.restaurarSesion();
+      if (login != null && mounted) {
+        _openHome(
+          profile: login.profile,
+          accessToken: login.accessToken ?? '',
+          userKey: login.userKey,
+        );
+        return;
+      }
+    } catch (error) {
+      debugPrint('No se pudo restaurar la sesión abierta: $error');
+    }
+    if (mounted) setState(() => _restaurandoSesion = false);
   }
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _identifierController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
-  Future<void> _restoreOfflineSession() async {
-    try {
-      final session = await _offlineSessionStore.read();
-      if (session == null) return;
-
-      final cachedProfile = await _offlineStore.readJson(
-        userKey: session.userKey,
-        key: OfflineStore.profileKey,
-      );
-      if (cachedProfile is! Map) {
-        throw const FormatException(
-          'No hay un perfil sincronizado para la última sesión.',
-        );
-      }
-
-      _offlineSession = session;
-      _offlineProfile = Map<String, dynamic>.from(cachedProfile);
-    } catch (error) {
-      debugPrint('No se pudo restaurar la sesión offline: $error');
-      _offlineSessionError = error.toString();
-    } finally {
-      if (mounted) {
-        setState(() => _isRestoringOfflineSession = false);
-      }
-    }
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _continueOffline() {
-    final session = _offlineSession;
-    final profile = _offlineProfile;
-    if (session == null || profile == null) return;
-
+  void _openHome({
+    required Map<String, dynamic> profile,
+    required String accessToken,
+    required String userKey,
+  }) {
     DemoData.instance.setAuthenticatedUser(
       profile,
-      fallbackEmail: profile['email'] as String? ?? session.userKey,
+      fallbackEmail: profile['email'] as String? ?? userKey,
     );
+    _offlineAuth.abrirSesion(userKey).catchError((Object error) {
+      debugPrint('No se pudo recordar la sesión abierta: $error');
+    });
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (context) => HomeScreen(
-          accessToken: session.accessToken,
-          userKey: session.userKey,
-        ),
+        builder: (context) =>
+            HomeScreen(accessToken: accessToken, userKey: userKey),
       ),
     );
   }
@@ -91,100 +89,119 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    final identifier = LoginIdentifier.parse(_identifierController.text)!;
+    final password = _passwordController.text;
+
     setState(() => _isLoading = true);
-
-    final servicio = ApiService();
-
     try {
-      final token = await servicio.iniciarSesion(
-        rut: _emailController.text.trim(),
-        password: _passwordController.text,
+      // Sin red se valida directo en el dispositivo, sin esperar un timeout.
+      Conectividad.instance.exigirConexion();
+      await _loginOnline(identifier, password);
+    } catch (error) {
+      if (!mounted) return;
+      if (OfflineAuthService.esFallaDeConexion(error)) {
+        debugPrint('Laravel no disponible, se intenta sin conexión: $error');
+        await _loginOffline(identifier, password);
+      } else if (error is ApiException) {
+        _showMessage(
+          error.statusCode == 422 || error.statusCode == 401
+              ? 'RUT/correo o contraseña incorrectos.'
+              : error.statusCode == 429
+              ? 'Demasiados intentos. Espera un momento e inténtalo de nuevo.'
+              : 'Error del servidor (${error.statusCode}).',
+        );
+      } else if (error is FormatException) {
+        _showMessage('No se pudo identificar tu perfil: ${error.message}');
+      } else {
+        debugPrint('Error durante el login: $error');
+        _showMessage('No se pudo iniciar sesión. Inténtalo de nuevo.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _loginOnline(LoginIdentifier identifier, String password) async {
+    final servicio = ApiService();
+    final String token;
+    final Map<String, dynamic> profile;
+    try {
+      token = await servicio.iniciarSesion(
+        rut: identifier.valor,
+        password: password,
       );
       final servicioAutenticado = ApiService(accessToken: token);
-      final Map<String, dynamic> profile;
       try {
         profile = await servicioAutenticado.obtenerUsuarioAutenticado();
       } finally {
         servicioAutenticado.close();
       }
-
-      if (!mounted) return;
-
-      final offlineProfile = _offlineStore.profileForOffline(
-        profile,
-        fallbackEmail: _emailController.text.trim(),
-      );
-      final userKey = OfflineStore.userKeyFor(offlineProfile);
-      try {
-        await _offlineSessionStore.clear();
-        await _offlineStore.saveJson(
-          userKey: userKey,
-          key: OfflineStore.profileKey,
-          value: offlineProfile,
-        );
-        await _offlineSessionStore.save(
-          OfflineSession(userKey: userKey, accessToken: token),
-        );
-      } catch (error) {
-        debugPrint('No se pudo persistir la sesión para uso offline: $error');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Sesión iniciada, pero no se pudo guardar el acceso offline.',
-              ),
-            ),
-          );
-        }
-      }
-
-      if (!mounted) return;
-      DemoData.instance.setAuthenticatedUser(
-        profile,
-        fallbackEmail: _emailController.text.trim(),
-      );
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) =>
-              HomeScreen(accessToken: token, userKey: userKey),
-        ),
-      );
-    } on ApiException catch (error) {
-      if (!mounted) return;
-
-      final mensaje = error.statusCode == 422 || error.statusCode == 401
-          ? 'Correo o contraseña incorrectos.'
-          : 'Error del servidor (${error.statusCode}).';
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(mensaje)));
-    } on FormatException catch (error) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo identificar tu perfil: $error')),
-      );
-    } catch (error) {
-      if (!mounted) return;
-
-      debugPrint('Error de conexión durante el login: $error');
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'No se pudo conectar con Laravel. '
-            'Revisa la conexión y el certificado HTTPS.',
-          ),
-        ),
-      );
     } finally {
       servicio.close();
+    }
 
+    final fallbackEmail = identifier.esCorreo ? identifier.valor : '';
+    final offlineProfile = _offlineStore.profileForOffline(
+      profile,
+      fallbackEmail: fallbackEmail,
+    );
+    final userKey = OfflineStore.userKeyFor(offlineProfile);
+    try {
+      await OfflineSessionStore().clear();
+      await _offlineStore.saveJson(
+        userKey: userKey,
+        key: OfflineStore.profileKey,
+        value: offlineProfile,
+      );
+      await _offlineAuth.guardarLoginOnline(
+        userKey: userKey,
+        profile: offlineProfile,
+        password: password,
+        accessToken: token,
+      );
+    } catch (error) {
+      debugPrint('No se pudo guardar el acceso sin conexión: $error');
       if (mounted) {
-        setState(() => _isLoading = false);
+        _showMessage(
+          'Sesión iniciada, pero no se pudo guardar el acceso sin conexión.',
+        );
+      }
+    }
+
+    if (!mounted) return;
+    _openHome(profile: profile, accessToken: token, userKey: userKey);
+  }
+
+  Future<void> _loginOffline(
+    LoginIdentifier identifier,
+    String password,
+  ) async {
+    try {
+      final login = await _offlineAuth.autenticar(
+        identificador: identifier,
+        password: password,
+      );
+      if (!mounted) return;
+      _showMessage(
+        'Sin conexión con el servidor. Entraste con los datos guardados '
+        'en este dispositivo.',
+      );
+      _openHome(
+        profile: login.profile,
+        accessToken: login.accessToken ?? '',
+        userKey: login.userKey,
+      );
+    } on OfflineAuthException catch (error) {
+      if (mounted) _showMessage(error.message);
+    } catch (error) {
+      debugPrint('Error en el login sin conexión: $error');
+      if (mounted) {
+        _showMessage(
+          'No hay conexión con el servidor y no se pudo validar el acceso '
+          'guardado en este dispositivo.',
+        );
       }
     }
   }
@@ -192,6 +209,10 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (_restaurandoSesion) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
     return Scaffold(
       body: Center(
@@ -220,21 +241,21 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   children: [
                     TextFormField(
-                      controller: _emailController,
+                      controller: _identifierController,
                       keyboardType: TextInputType.emailAddress,
                       autocorrect: false,
                       textInputAction: TextInputAction.next,
                       decoration: InputDecoration(
-                        labelText: 'Correo Electrónico',
-                        prefixIcon: const Icon(Icons.email),
+                        labelText: 'RUT o correo electrónico',
+                        hintText: '12.345.678-9 o nombre@empresa.cl',
+                        prefixIcon: const Icon(Icons.person),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                         filled: true,
                         fillColor: isDark ? Colors.black12 : Colors.white,
                       ),
-                      validator: (value) =>
-                          value!.isEmpty ? 'Ingrese su correo' : null,
+                      validator: LoginIdentifier.validar,
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -260,8 +281,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         filled: true,
                         fillColor: isDark ? Colors.black12 : Colors.white,
                       ),
-                      validator: (value) =>
-                          value!.isEmpty ? 'Ingrese su contraseña' : null,
+                      validator: (value) => value == null || value.isEmpty
+                          ? 'Ingrese su contraseña'
+                          : null,
                       onFieldSubmitted: (_) => _login(),
                     ),
                     const SizedBox(height: 32),
@@ -275,41 +297,23 @@ class _LoginScreenState extends State<LoginScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      child: const Text(
-                        'Ingresar',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              height: 22,
+                              width: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Ingresar',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                     ),
-                    if (_isRestoringOfflineSession) ...[
-                      const SizedBox(height: 12),
-                      const Center(child: CircularProgressIndicator()),
-                    ] else if (_offlineSession != null &&
-                        _offlineProfile != null) ...[
-                      const SizedBox(height: 12),
-                      OutlinedButton.icon(
-                        onPressed: _isLoading ? null : _continueOffline,
-                        icon: const Icon(Icons.cloud_off),
-                        label: Text(
-                          'Continuar sin conexión como '
-                          '${_offlineProfile!['name'] ?? _offlineProfile!['email'] ?? 'último usuario'}',
-                        ),
-                      ),
-                      const Text(
-                        'Se abrirán sólo los datos previamente sincronizados '
-                        'en este dispositivo.',
-                        textAlign: TextAlign.center,
-                      ),
-                    ] else if (_offlineSessionError != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        'No se pudo restaurar la sesión offline: '
-                        '$_offlineSessionError',
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    ],
                   ],
                 ),
               ),

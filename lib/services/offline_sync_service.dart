@@ -39,7 +39,7 @@ class OfflineSyncService {
     try {
       for (final entry in entries) {
         if (entry.entity != 'eventos' ||
-            entry.operation != 'crear' ||
+            (entry.operation != 'crear' && entry.operation != 'cerrar') ||
             entry.payload?['user_key'] != userKey) {
           continue;
         }
@@ -47,6 +47,19 @@ class OfflineSyncService {
         try {
           final payload = entry.payload!;
           final evidences = _decodeEvidence(payload);
+          if (entry.operation == 'cerrar') {
+            await service.cerrarEvento(
+              idEvento: _requiredInt(payload, 'id_evento'),
+              justificacion: _requiredString(payload, 'justificacion'),
+              fechaReinicio: DateTime.tryParse(
+                payload['fecha_reinicio']?.toString() ?? '',
+              ),
+              evidencias: evidences,
+            );
+            await queue.markSynced(entry.id);
+            synchronized++;
+            continue;
+          }
           await service.registrarEvento(
             idTipoEvento: _requiredInt(payload, 'id_tipo_evento'),
             condicion: _requiredInt(payload, 'condicion'),

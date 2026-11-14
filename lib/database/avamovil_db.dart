@@ -10,7 +10,7 @@ class AvaMovilDatabase {
 
   static Database? _database;
 
-  static const int version = 3;
+  static const int version = 4;
   static const String _databaseName = 'avamovil.db';
 
   AvaMovilDatabase._init();
@@ -130,6 +130,7 @@ class AvaMovilDatabase {
       // Solo móvil
       sincronizacionTable,
       offlineCacheTable,
+      credencialesOfflineTable,
     ];
 
     for (final statement in tableCreationStatements) {
@@ -264,6 +265,10 @@ class AvaMovilDatabase {
 
     if (oldVersion < 3 && newVersion >= 3) {
       await db.execute(offlineCacheTable);
+    }
+
+    if (oldVersion < 4 && newVersion >= 4) {
+      await db.execute(credencialesOfflineTable);
     }
   }
 

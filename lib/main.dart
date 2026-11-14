@@ -3,8 +3,11 @@ import 'package:provider/provider.dart';
 import 'package:avamovil/styles/colors.dart';
 import 'package:avamovil/view/auth/login_screen.dart';
 import 'package:avamovil/controller/theme_controller.dart';
+import 'package:avamovil/services/conectividad.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  Conectividad.instance.iniciar();
   runApp(
     MultiProvider(
       providers: [

@@ -12,7 +12,10 @@ import 'package:avamovil/view/reports/report_qr_scanner_screen.dart';
 import 'package:avamovil/view/permissions/permissions_screen.dart';
 import 'package:avamovil/controller/theme_controller.dart';
 import 'package:avamovil/services/api_service.dart';
+import 'package:avamovil/services/conectividad.dart';
+import 'package:avamovil/services/evidence_cache.dart';
 import 'package:avamovil/services/offline_reports_sync.dart';
+import 'package:avamovil/services/offline_auth.dart';
 import 'package:avamovil/services/offline_store.dart';
 import 'package:avamovil/services/offline_sync_service.dart';
 
@@ -39,6 +42,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final servicio = ApiService(accessToken: widget.accessToken);
 
     try {
+      Conectividad.instance.exigirConexion();
       final proyectos = await servicio.obtenerProyectos();
       await _offlineStore.saveJson(
         userKey: _userKey,
@@ -71,11 +75,92 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  DateTime? _ultimaSincronizacion;
+  bool _estabaSinConexion = Conectividad.instance.sinConexion;
+
+  bool get _tieneToken => widget.accessToken.trim().isNotEmpty;
+
   @override
   void initState() {
     super.initState();
+    Conectividad.instance.addListener(_alCambiarConexion);
+    _leerUltimaSincronizacion();
+    _actualizarDesdeServidor();
+  }
+
+  @override
+  void dispose() {
+    Conectividad.instance.removeListener(_alCambiarConexion);
+    super.dispose();
+  }
+
+  /// Sube lo pendiente y renueva la copia local. Se llama al abrir la
+  /// pantalla y cada vez que vuelve la conexión.
+  void _actualizarDesdeServidor() {
+    if (Conectividad.instance.sinConexion || !_tieneToken) return;
     _comprobarProyectos();
     _syncPendingReports().whenComplete(_descargarReportesParaSinConexion);
+  }
+
+  void _alCambiarConexion() {
+    if (!mounted) return;
+    final sinConexion = Conectividad.instance.sinConexion;
+    final reconecto = _estabaSinConexion && !sinConexion;
+    setState(() => _estabaSinConexion = sinConexion);
+    if (reconecto) _actualizarDesdeServidor();
+  }
+
+  Future<void> _leerUltimaSincronizacion() async {
+    try {
+      final estado = await OfflineReportsSync.instance.estado(
+        userKey: _userKey,
+        clave: OfflineStore.myReportsKey,
+      );
+      if (mounted) setState(() => _ultimaSincronizacion = estado?.fecha);
+    } catch (error) {
+      debugPrint('No se pudo leer la fecha de sincronización: $error');
+    }
+  }
+
+  String _formatoFecha(DateTime fecha) {
+    String dos(int n) => n.toString().padLeft(2, '0');
+    return '${dos(fecha.day)}/${dos(fecha.month)} '
+        '${dos(fecha.hour)}:${dos(fecha.minute)}';
+  }
+
+  /// Franja superior que avisa que se trabaja con la copia local.
+  Widget? _franjaConexion() {
+    final String texto;
+    if (Conectividad.instance.sinConexion) {
+      final fecha = _ultimaSincronizacion;
+      texto = fecha == null
+          ? 'Sin conexión · usando los datos guardados'
+          : 'Sin conexión · datos del ${_formatoFecha(fecha)}';
+    } else if (!_tieneToken) {
+      texto =
+          'Sesión sin conexión: vuelve a iniciar sesión con internet '
+          'para sincronizar';
+    } else {
+      return null;
+    }
+    return Material(
+      color: Colors.orange.shade800,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        child: Row(
+          children: [
+            const Icon(Icons.cloud_off, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                texto,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// Corre en segundo plano y después de subir lo pendiente, para que la copia
@@ -83,7 +168,11 @@ class _HomeScreenState extends State<HomeScreen> {
   /// cambie de pantalla.
   Future<void> _descargarReportesParaSinConexion() async {
     final demoData = DemoData.instance;
-    if (!demoData.isApiSession) return;
+    if (!demoData.isApiSession ||
+        !_tieneToken ||
+        Conectividad.instance.sinConexion) {
+      return;
+    }
 
     final userKey = _userKey;
     final servicio = ApiService(accessToken: widget.accessToken);
@@ -106,6 +195,15 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         );
       }
+      await _leerUltimaSincronizacion();
+      await EvidenceCache.instance.descargarDeReportes(
+        userKey: userKey,
+        claves: [
+          OfflineStore.myReportsKey,
+          if (!demoData.isWorker) OfflineStore.teamReportsKey,
+        ],
+        accessToken: widget.accessToken,
+      );
     } catch (error) {
       debugPrint('No se pudieron guardar los reportes offline: $error');
     } finally {
@@ -114,7 +212,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _syncPendingReports() async {
-    if (_isSyncing) return;
+    if (_isSyncing || !_tieneToken || Conectividad.instance.sinConexion) {
+      return;
+    }
     setState(() => _isSyncing = true);
     try {
       final result = await const OfflineSyncService().synchronize(
@@ -340,6 +440,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await _revocarToken();
     try {
       await OfflineSessionStore().clear();
+      await OfflineAuthService().cerrarSesion(_userKey);
     } catch (error) {
       debugPrint('No se pudo borrar la sesión offline: $error');
       if (mounted) {
@@ -690,9 +791,16 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-      body: _showPermissions && !isWorker
-          ? PermissionsScreen(accessToken: widget.accessToken)
-          : pages.elementAt(_selectedIndex),
+      body: Column(
+        children: [
+          ?_franjaConexion(),
+          Expanded(
+            child: _showPermissions && !isWorker
+                ? PermissionsScreen(accessToken: widget.accessToken)
+                : pages.elementAt(_selectedIndex),
+          ),
+        ],
+      ),
 
       bottomNavigationBar: Container(
         decoration: BoxDecoration(

@@ -156,8 +156,9 @@ CREATE TABLE supervisores (
 // ============================================================
 //
 // IMPORTANTE:
-// No guardaremos password en SQLite.
-// La autenticación real debe hacerse en Laravel.
+// No guardaremos password en SQLite. La autenticación se hace en Laravel;
+// para entrar sin conexión sólo se guarda un hash bcrypt en
+// `credenciales_offline`.
 //
 
 const String usersTable = '''
@@ -525,5 +526,27 @@ CREATE TABLE offline_cache (
   payload_json TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   UNIQUE(user_key, cache_key)
+);
+''';
+
+// ============================================================
+// CREDENCIALES OFFLINE
+// ============================================================
+//
+// Un registro por usuario que inició sesión con conexión en este
+// dispositivo. Guarda sólo el hash bcrypt de la contraseña (nunca la
+// contraseña ni el token, que va en el almacenamiento seguro).
+//
+
+const String credencialesOfflineTable = '''
+CREATE TABLE credenciales_offline (
+  user_key TEXT PRIMARY KEY,
+  id_user INTEGER,
+  email TEXT UNIQUE,
+  rut TEXT UNIQUE,
+  password_hash TEXT NOT NULL,
+  ultimo_login_online TEXT NOT NULL,
+  intentos_fallidos INTEGER NOT NULL DEFAULT 0,
+  bloqueado_hasta TEXT
 );
 ''';
